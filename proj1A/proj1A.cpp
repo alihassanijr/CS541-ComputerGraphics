@@ -2,6 +2,10 @@
 
 Ali Hassani
 
+Project 1-A
+
+CS 441/541
+
 */
 #include <iostream>
 #include <fstream>

@@ -12,8 +12,12 @@ CS 441/541
 #include <string>
 #include <assert.h>
 #include <math.h>
+#include <vector>
+#include <bits/stdc++.h>
 
 using namespace std;
+
+const double TOL = 0.00001;
 
 double C441(double f) {
   return ceil(f-0.00001);
@@ -29,25 +33,25 @@ struct Triangle {
   unsigned char color[3];
 };
 
-double smallest_y_value(Triangle &t) {
-  return std::min({t.Y[0], t.Y[1], t.Y[2]});
-}
-
-double largest_y_value(Triangle &t) {
-  return std::max({t.Y[0], t.Y[1], t.Y[2]});
-}
-
-int topmost_vertex_idx(Triangle &t) {
-  if (t.Y[0] > t.Y[1] && t.Y[0] > t.Y[2]){
-    return 0;
-  }
-  if (t.Y[1] > t.Y[0] && t.Y[1] > t.Y[2]){
-    return 1;
-  }
-  if (t.Y[2] > t.Y[0] && t.Y[2] > t.Y[1]){
-    return 2;
-  }
-  assert("Invalid triangle Y coordinates: %d %d %d", t.Y[0], t.Y[1], t.Y[2]);
+/// This returns vertex indices sorted by Y value in descending order
+//// It's been a while and it took me a while to remember the best way to sort and get 
+//// indices, so I just ended up hard coding it.
+//// I'll fix it in future projects, I swear. I know how terrible this is.
+vector<int> sorted_y_idx(Triangle &t) {
+  if (t.Y[0] >= t.Y[1] && t.Y[1] >= t.Y[2])
+    return {0, 1, 2};
+  if (t.Y[0] >= t.Y[2] && t.Y[2] >= t.Y[1])
+    return {0, 2, 1};
+  if (t.Y[1] >= t.Y[0] && t.Y[0] >= t.Y[2])
+    return {1, 0, 2};
+  if (t.Y[1] >= t.Y[2] && t.Y[2] >= t.Y[0])
+    return {1, 2, 0};
+  if (t.Y[2] >= t.Y[1] && t.Y[1] >= t.Y[0])
+    return {2, 1, 0};
+  if (t.Y[2] >= t.Y[0] && t.Y[0] >= t.Y[1])
+    return {2, 0, 1};
+  cerr << "Sort failed! " << endl;
+  terminate();
 }
 
 struct Pixel {
@@ -86,7 +90,6 @@ struct Pixel {
   }
 };
 
-template<Layout layout>
 struct Image {
   struct Params {
     int height, width;
@@ -103,7 +106,8 @@ struct Image {
       } else if (dim == 1) {
         return 1;
       }
-      assert(false);
+      cerr << "Valid dimensions for an image are 0 and 1, got " << dim << endl;
+      terminate();
     }
   };
 
@@ -129,13 +133,18 @@ public:
   }
 
   int safe_coordinate(int index, int limit) {
-    // return std::min(std::max(index, limit - 1), 0);
-    // TODO: add a "layout" template to support both at the same time?
-    return limit - std::min(std::max(index, limit - 1), 0) - 1;
+    if (index >= 0 && index < limit)
+      return index;
+    return -1;
   }
 
   int safe_x_coordinate(int x) {
-    return safe_coordinate(x, params.height);
+    int safe_x = safe_coordinate(x, params.height);
+    if (safe_x < 0)
+      return -1;
+    // TODO: add a "layout" template to support both coordinate formats (even more) at the same time?
+    return params.height - 1 - safe_x;
+    //return safe_coordinate(x, params.height);
   }
 
   int safe_y_coordinate(int y) {
@@ -157,6 +166,8 @@ public:
   void set_pixel(int x, int y, Pixel v) {
     int x_ = safe_x_coordinate(x);
     int y_ = safe_y_coordinate(y);
+    if (x_ < 0 || y_ < 0)
+      return;
     _arr[x_ * params.stride(0) + y_].set_value(v);
   }
 
@@ -182,7 +193,6 @@ public:
 
 };
 
-
 void Image2PNM(Image img, string fn) {
   const char* format = "P6";
   const char* maxval = "255";
@@ -203,36 +213,86 @@ struct TriangleList {
   Triangle *triangles;
 };
 
-double intersectionEndpoints(double x0, double y0, double x1, double y1, double y) {
-  if (se(x0, x1) < TOL) {
+/// Squared difference will be used when checking for edge cases in the next function.
+//// Comparing squared difference to a threshold should be --safer-- than just comparing if two
+//// doubles are the same?
+template <typename T>
+T squared_difference(T a, T b) {
+  T diff = a - b;
+  return diff * diff;
+}
+
+/// The magic function.
+//// Surprisingly, most of my time went out the window, not because of this,
+//// but because I was stupid enough to check if X coords are within bounds, but did Y wrong.
+//// and as a result, I had a 3 pixel (out of 1000) difference with the solution that wasted an hour.
+double intersectionEndpoint(double x0, double y0, double x1, double y1, double y) {
+  if (squared_difference(x0, x1) < TOL) {
     return std::min(x0, x1);
   }
-  if (se(y0, y1) < TOL) {
-    assert("This shouldn't happen. Did you compute the top vertex correctly? Coordinates: <%d, %d> <%d, %d>, Y=%d",
-           x0, y0, x1, y1, y);
+  if (squared_difference(y0, y1) < TOL) {
+    cerr << "This shouldn't happen. Did you compute the top vertex correctly?";
+    cerr << "Coordinates: <" << x0 << ", " << y0 << "> <" << x1 << ", " << y1 << ">, Y= " << y << endl;
+    terminate();
   }
   double m = (y1 - y0) / (x1 - x0);
   double b = y1 - (m * x1);
   return (y - b) / m;
 }
 
+/// RasterizeGoingUpTriangle
+//// Unless I'm totally wrong, this should cover more than just this project where the
+//// two bottom-most vertices are aligned. At least my dummy example was such a triangle and
+//// worked like a charm.
 void RasterizeGoingUpTriangle(Triangle &t, Image &x) {
-  int topmost_v = topmost_vertex_idx(t);
-  int lb = leftmost_bottom_vertex_idx(t, topmost_v);
-  int rb = 3 - topmost_v + lb; // Just an easy way to figure out the third vertex without conditional statements.
-  int rowMin = C441(smallest_y_value(t));
-  int rowMax = F441(largest_y_value(t));
+  vector<int> sorted_idx = sorted_y_idx(t);
+  // We're going to need these sorted vertices later, but we could just use them
+  // here instead of recalculating rowMin and rowMax.
+  int rowMin = C441(t.Y[sorted_idx[2]]);
+  int rowMax = F441(t.Y[sorted_idx[0]]);
 
-  for (int r=rowMin; r <= rowMax; ++r) {
-    int leftEnd = C441(t.X[lb], t.Y[lb], t.X[topmost_v], t.Y[topmost_v], r);
-    int rightEnd = F441(t.X[rb], t.Y[rb], t.X[topmost_v], t.Y[topmost_v], r);
+  // Bottom half (non-existent in 1-B triangles)
+  for (int r=rowMin; r < C441(t.Y[sorted_idx[1]]); ++r) {
+    int anchor = sorted_idx[2]; // In the bottom half our anchor is the bottom most vertex
+    int leftv, rightv;
+    // Again, seemed more trouble than it was worth compared to a simple if-else
+    if (t.X[sorted_idx[1]] < t.X[sorted_idx[0]]) {
+      leftv = sorted_idx[1];
+      rightv = sorted_idx[0];
+    } else {
+      leftv = sorted_idx[0];
+      rightv = sorted_idx[1];
+    }
+
+    int leftEnd  = C441(intersectionEndpoint(t.X[leftv], t.Y[leftv], t.X[anchor], t.Y[anchor], r));
+    int rightEnd = F441(intersectionEndpoint(t.X[rightv], t.Y[rightv], t.X[anchor], t.Y[anchor], r));
+    for (int c = leftEnd; c <= rightEnd; ++c) {
+      x.set_pixel(r, c, Pixel(t.color));
+    }
+  }
+
+  // Top half
+  for (int r=F441(t.Y[sorted_idx[1]]); r <= rowMax; ++r) {
+    int anchor = sorted_idx[0]; // In the top half our anchor is the top most vertex
+    int leftv, rightv;
+    // Again, seemed more trouble than it was worth compared to a simple if-else
+    if (t.X[sorted_idx[1]] < t.X[sorted_idx[2]]) {
+      leftv = sorted_idx[1];
+      rightv = sorted_idx[2];
+    } else {
+      leftv = sorted_idx[2];
+      rightv = sorted_idx[1];
+    }
+
+    int leftEnd  = C441(intersectionEndpoint(t.X[leftv], t.Y[leftv], t.X[anchor], t.Y[anchor], r));
+    int rightEnd = F441(intersectionEndpoint(t.X[rightv], t.Y[rightv], t.X[anchor], t.Y[anchor], r));
     for (int c = leftEnd; c <= rightEnd; ++c) {
       x.set_pixel(r, c, Pixel(t.color));
     }
   }
 }
 
-TriangleList *GetTriangles() {
+TriangleList GetTriangles() {
   TriangleList tl;
   tl.numTriangles = 100;
   tl.triangles = new Triangle[100];
@@ -271,15 +331,10 @@ int main() {
 
     Image x = Image(1000, 1000);
 
-    Triangle test_t;
-    t.X[0] = 50; t.Y[0] = 50;
-    t.X[1] = 500; t.Y[1] = 500;
-    t.X[2] = 25; t.Y[2] = 750;
-    t.color[0] = 128;
-    t.color[1] = 128;
-    t.color[2] = 0;
+    TriangleList list = GetTriangles();
 
-    RasterizeGoingUpTriangle(&t, &x);
+    for (int i=0; i < list.numTriangles; ++i)
+      RasterizeGoingUpTriangle(list.triangles[i], x);
 
     cout << "Saving image" << endl;
 

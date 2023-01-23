@@ -14,6 +14,7 @@ CS 441/541
 #include <math.h>
 #include <vector>
 #include <bits/stdc++.h>
+#include <limits>
 
 using namespace std;
 
@@ -43,8 +44,8 @@ void swap(T* a, T* b, bool condition) {
 /// Linear interpolation (lerp.)
 template <typename T, typename value_t>
 value_t lerp(T a, T b, value_t f_a, value_t f_b, T c) {
-  T t = (c - a) / (b - a);
-  return f_a + value_t(t * (f_b - f_a));
+  value_t t = value_t(c - a) / value_t(b - a);
+  return f_a + (t * (f_b - f_a));
 }
 
 /// CS441 Ceil function.
@@ -116,23 +117,124 @@ index_t* clip_sort(index_t* index, const index_t length, index_t exclude) {
 namespace triangles {
 // namespace triangles
 
+struct Color {
+  double colors[3];
+
+  Color() { }
+
+  Color(double r, double g, double b) {
+    //colors = new double[3];
+    colors[0] = r;
+    colors[1] = g;
+    colors[2] = b;
+  }
+
+  Color(double c) {
+    //colors = new double[3];
+    for (int i=0; i < 3; ++i)
+      colors[i] = c;
+  }
+
+  Color(double * rgb) {
+    for (int i=0; i < 3; ++i)
+      colors[i] = rgb[i];
+  }
+
+  bool valid() const {
+    return colors != nullptr;
+  }
+
+  Color operator*(const double &b) {
+    assert(this->valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] * b;
+    return c;
+  }
+
+  Color operator/(const double &b) {
+    assert(this->valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] / b;
+    return c;
+  }
+
+  Color operator+(const double &b) {
+    assert(this->valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] + b;
+    return c;
+  }
+
+  Color operator-(const double &b) {
+    assert(this->valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] - b;
+    return c;
+  }
+
+  Color operator*(const Color &b) {
+    assert(this->valid());
+    assert(b.valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] * b.colors[i];
+    return c;
+  }
+
+  Color operator/(const Color &b) {
+    assert(this->valid());
+    assert(b.valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] / b.colors[i];
+    return c;
+  }
+
+  Color operator+(const Color &b) {
+    assert(this->valid());
+    assert(b.valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] + b.colors[i];
+    return c;
+  }
+
+  Color operator-(const Color &b) {
+    assert(this->valid());
+    assert(b.valid());
+    Color c/*(new double[3])*/;
+    for (int i=0; i < 3; ++i)
+      c.colors[i] = this->colors[i] - b.colors[i];
+    return c;
+  }
+};
+
 /// Vertex
 //// I like to define a Vertex struct because it makes it so much easier to pass an array of pointers
 //// when we're pre-sorting all vertices.
 struct Vertex {
   double* X;
   double* Y;
+  double* Z;
 
-  Vertex(double &x, double &y) {
+  Vertex(double &x, double &y, double &z) {
     X = &x;
     Y = &y;
+    Z = &z;
   }
 
-  double x() {
+  double x() const {
     return X[0];
   }
-  double y() {
+  double y() const {
     return Y[0];
+  }
+  double z() const {
+    return Z[0];
   }
 };
 
@@ -142,7 +244,8 @@ struct Vertex {
 struct Triangle {
   double         X[3];
   double         Y[3];
-  unsigned char color[3];
+  double         Z[3];
+  double         color[3][3];
 
   bool sorted = false; /* Checks if it's already been sorted (assume Triangle coordinates do not change while rasterizing) */
   int* sorted_X_top; /* Left and right vertices in the top half of the triangle */
@@ -160,27 +263,51 @@ struct Triangle {
   }
 
   Vertex top() {
-    return Vertex(X[sorted_Y[2]], Y[sorted_Y[2]]);
-  }
-  Vertex middle() {
-    return Vertex(X[sorted_Y[1]], Y[sorted_Y[1]]);
-  }
-  Vertex bottom() {
-    return Vertex(X[sorted_Y[0]], Y[sorted_Y[0]]);
+    return Vertex(X[sorted_Y[2]], Y[sorted_Y[2]], Z[sorted_Y[2]]);
+  }                                             
+  Vertex middle() {                             
+    return Vertex(X[sorted_Y[1]], Y[sorted_Y[1]], Z[sorted_Y[1]]);
+  }                                             
+  Vertex bottom() {                             
+    return Vertex(X[sorted_Y[0]], Y[sorted_Y[0]], Z[sorted_Y[0]]);
   }
 
   Vertex top_left() {
-    return Vertex(X[sorted_X_top[0]], Y[sorted_X_top[0]]);
-  }
-  Vertex top_right() {
-    return Vertex(X[sorted_X_top[1]], Y[sorted_X_top[1]]);
+    return Vertex(X[sorted_X_top[0]], Y[sorted_X_top[0]], Z[sorted_X_top[0]]);
+  }                                                     
+  Vertex top_right() {                                  
+    return Vertex(X[sorted_X_top[1]], Y[sorted_X_top[1]], Z[sorted_X_top[1]]);
   }
 
   Vertex bottom_left() {
-    return Vertex(X[sorted_X_bottom[0]], Y[sorted_X_bottom[0]]);
+    return Vertex(X[sorted_X_bottom[0]], Y[sorted_X_bottom[0]], Z[sorted_X_bottom[0]]);
+  }                                                           
+  Vertex bottom_right() {                                     
+    return Vertex(X[sorted_X_bottom[1]], Y[sorted_X_bottom[1]], Z[sorted_X_bottom[1]]);
   }
-  Vertex bottom_right() {
-    return Vertex(X[sorted_X_bottom[1]], Y[sorted_X_bottom[1]]);
+
+  Color top_color() {
+    return Color(color[sorted_Y[2]]);
+  }                            
+  Color middle_color() {             
+    return Color(color[sorted_Y[1]]);
+  }                            
+  Color bottom_color() {             
+    return Color(color[sorted_Y[0]]);
+  }
+
+  Color top_left_color() {
+    return Color(color[sorted_X_top[0]]);
+  }                                
+  Color top_right_color() {              
+    return Color(color[sorted_X_top[1]]);
+  }
+
+  Color bottom_left_color() {
+    return Color(color[sorted_X_bottom[0]]);
+  }                                   
+  Color bottom_right_color() {              
+    return Color(color[sorted_X_bottom[1]]);
   }
 };
 
@@ -194,6 +321,77 @@ struct TriangleList {
 ////////////////////////////////////////////////////////////////////////////////////////
 
 namespace geometry {
+
+struct Coord {
+  double* X;
+  double* Y;
+
+  Coord(double x, double y) {
+    X = new double[1];
+    Y = new double[1];
+    X[0] = x;
+    Y[0] = y;
+  }
+
+  Coord(double &x, double &y) {
+    X = &x;
+    Y = &y;
+  }
+
+  Coord(double *x, double *y) {
+    X = x;
+    Y = y;
+  }
+
+  Coord(triangles::Vertex v) {
+    X = v.X;
+    Y = v.Y;
+  }
+
+  double x() const {
+    return X[0];
+  }
+  double y() const {
+    return Y[0];
+  }
+
+  Coord operator*(const Coord &b) {
+    Coord c(new double[1], new double[1]);
+    c.X[0] = this->x() * b.x();
+    c.Y[0] = this->y() * b.y();
+    return c;
+  }
+
+  Coord operator/(const Coord &b) {
+    Coord c(new double[1], new double[1]);
+    c.X[0] = this->x() / b.x();
+    c.Y[0] = this->y() / b.y();
+    return c;
+  }
+
+  Coord operator+(const Coord &b) {
+    Coord c(new double[1], new double[1]);
+    c.X[0] = this->x() + b.x();
+    c.Y[0] = this->y() + b.y();
+    return c;
+  }
+
+  Coord operator-(const Coord &b) {
+    Coord c(new double[1], new double[1]);
+    c.X[0] = this->x() - b.x();
+    c.Y[0] = this->y() - b.y();
+    return c;
+  }
+
+  operator double() const {
+    return std::sqrt(std::pow(x(), 2) + std::pow(y(), 2));
+  }
+
+  operator triangles::Color() const {
+    double c = std::sqrt(std::pow(x(), 2) + std::pow(y(), 2));
+    return triangles::Color(c, c, c);
+  }
+};
 
 /// Line
 //// Initialized with a slope and bias, and optionally a "left" and "right" coordinate to support cases
@@ -246,6 +444,10 @@ Line intercept(triangles::Vertex a, triangles::Vertex b) {
 
 namespace image {
 
+unsigned char pixeldouble2char(double c) {
+  return math::C441(c * 255);
+}
+
 /// Pixel
 //// Holds a single RGB value, initialized as black (0, 0, 0).
 struct Pixel {
@@ -255,7 +457,11 @@ struct Pixel {
 
   Pixel(unsigned char r, unsigned char g, unsigned char b): r(r), g(g), b(b) {}
 
+  Pixel(double r, double g, double b): r(pixeldouble2char(r)), g(pixeldouble2char(g)), b(pixeldouble2char(b)) {}
+
   Pixel(unsigned char *color): r(color[0]), g(color[1]), b(color[2]) {}
+
+  Pixel(double *color): r(pixeldouble2char(color[0])), g(pixeldouble2char(color[1])), b(pixeldouble2char(color[2])) {}
 
   void set_value(unsigned char r_, unsigned char g_, unsigned char b_) {
     r = r_;
@@ -263,12 +469,18 @@ struct Pixel {
     b = b_;
   }
 
+  void set_value(double r_, double g_, double b_) {
+    r = pixeldouble2char(r_);
+    g = pixeldouble2char(g_);
+    b = pixeldouble2char(b_);
+  }
+
   void set_value(Pixel p) {
     set_value(p.r, p.g, p.b);
   }
 
   void zfill() {
-    set_value(0, 0, 0);
+    set_value(0.0d, 0.0d, 0.0d);
   }
 
   unsigned char get_r() {
@@ -309,22 +521,26 @@ struct Image {
 
 private:
   Pixel *_arr;
+  double *z_buffer;
 
 public:
   Params params;
 
   Image(): params(Params(0, 0)) {
     _arr = nullptr;
+    z_buffer = nullptr;
   }
 
   Image(int x_length, int y_length): params(Params(x_length, y_length)) {
     _arr = new Pixel[params.numel()];
+    z_buffer = new double[params.numel()];
     zfill();
   }
 
   void zfill() {
     for (int i=0; i < params.numel(); ++i) {
       _arr[i].zfill();
+      z_buffer[i] = std::numeric_limits<double>::lowest();
     }
   }
 
@@ -360,11 +576,19 @@ public:
   }
 
   void set_pixel(int y, int x, Pixel v) {
+    set_pixel(y, x, 0, v);
+  }
+
+  void set_pixel(int y, int x, double z, Pixel v) {
     int x_ = safe_x_coordinate(x);
     int y_ = safe_y_coordinate(y);
     if (x_ < 0 || y_ < 0)
       return;
-    _arr[y_ * params.stride(0) + x_].set_value(v);
+    int linearIndex = y_ * params.stride(0) + x_;
+    if (z < z_buffer[linearIndex])
+      return;
+    z_buffer[linearIndex] = z;
+    _arr[linearIndex].set_value(v);
   }
 
   Pixel get_pixel(int y, int x) {
@@ -390,43 +614,91 @@ namespace algorithms {
 void fillTriangle(
     triangles::Triangle &t, 
     image::Image &x, 
-    int rowMin, 
-    int rowMax, 
+    double rowMin, 
+    double rowMax, 
     triangles::Vertex anchor, 
     triangles::Vertex left, 
-    triangles::Vertex right) {
+    triangles::Vertex right, 
+    triangles::Color anchorColor, 
+    triangles::Color leftColor, 
+    triangles::Color rightColor) {
   geometry::Line leftEdge  = geometry::intercept( left, anchor);
   geometry::Line rightEdge = geometry::intercept(right, anchor);
   if (leftEdge.valid() && rightEdge.valid()) {
-    for (int r=rowMin; r <= rowMax; ++r) {
-      double leftEndD  =   leftEdge.leftIntersection(r);
-      double rightEndD = rightEdge.rightIntersection(r);
-      math::swap<double>(&leftEndD, &rightEndD, leftEndD > rightEndD);
-      int leftEnd  = math::C441( leftEndD);
-      int rightEnd = math::F441(rightEndD);
-      for (int c = leftEnd; c <= rightEnd; ++c) {
-        x.set_pixel(r, c, image::Pixel(t.color));
+    for (int r=math::C441(rowMin); r <= math::F441(rowMax); ++r) {
+      double leftEnd  =   leftEdge.leftIntersection(r);
+      double rightEnd = rightEdge.rightIntersection(r);
+      double leftZ = math::lerp<geometry::Coord, double>(
+          geometry::Coord(left), 
+          geometry::Coord(anchor), 
+          left.z(), 
+          anchor.z(), 
+          geometry::Coord(leftEnd, r));
+      double rightZ = math::lerp<geometry::Coord, double>(
+          geometry::Coord(right), 
+          geometry::Coord(anchor), 
+          right.z(), 
+          anchor.z(), 
+          geometry::Coord(rightEnd, r));
+      triangles::Color leftColorX = math::lerp<geometry::Coord, triangles::Color>(
+          geometry::Coord(left), 
+          geometry::Coord(anchor), 
+          leftColor, 
+          anchorColor, 
+          geometry::Coord(leftEnd, r));
+      triangles::Color rightColorX = math::lerp<geometry::Coord, triangles::Color>(
+          geometry::Coord(right), 
+          geometry::Coord(anchor), 
+          rightColor, 
+          anchorColor, 
+          geometry::Coord(rightEnd, r));
+      if (leftEnd >= rightEnd) {
+        math::swap<double>(&leftZ, &rightZ);
+        math::swap<triangles::Color>(&leftColorX, &rightColorX);
+        math::swap<double>(&leftEnd, &rightEnd);
+      }
+      for (int c = math::C441(leftEnd); c <= math::F441(rightEnd); ++c) {
+        double z = math::lerp<double, double>(
+             leftEnd, 
+            rightEnd, 
+            leftZ, 
+            rightZ, 
+            c);
+        triangles::Color color = math::lerp<double, triangles::Color>(
+             leftEnd, 
+            rightEnd, 
+            leftColorX, 
+            rightColorX, 
+            c);
+        x.set_pixel(r, c, z, image::Pixel(color.colors[0], color.colors[1], color.colors[2]));
+        //x.set_pixel(r, c, z, image::Pixel(t.color[0]));
       }
     }
   }
 }
 
 void fillBottomTriangle(triangles::Triangle &t, image::Image &x) {
-  int rowMin = math::C441(t.bottom().y());
-  int rowMax = math::F441(t.middle().y());
+  double rowMinD = t.bottom().y();
+  double rowMaxD = t.middle().y();
   triangles::Vertex anchor = t.bottom();
   triangles::Vertex   left = t.bottom_left();
   triangles::Vertex  right = t.bottom_right();
-  fillTriangle(t, x, rowMin, rowMax, anchor, left, right);
+  triangles::Color anchorColor =       t.bottom_color();
+  triangles::Color   leftColor =  t.bottom_left_color();
+  triangles::Color  rightColor = t.bottom_right_color();
+  fillTriangle(t, x, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
 }
 
 void fillTopTriangle(triangles::Triangle &t, image::Image &x) {
-  int rowMin = math::C441(t.middle().y());
-  int rowMax = math::F441(t.top().y());
+  double rowMinD = t.middle().y();
+  double rowMaxD = t.top().y();
   triangles::Vertex anchor = t.top();
   triangles::Vertex   left = t.top_left();
   triangles::Vertex  right = t.top_right();
-  fillTriangle(t, x, rowMin, rowMax, anchor, left, right);
+  triangles::Color anchorColor =       t.top_color();
+  triangles::Color   leftColor =  t.top_left_color();
+  triangles::Color  rightColor = t.top_right_color();
+  fillTriangle(t, x, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
 }
 
 void RasterizeGoingUpTriangle(triangles::Triangle &t, image::Image &x) {
@@ -466,123 +738,115 @@ void Image2PNM(image::Image img, string fn) {
 namespace skel {
 // namespace skel holds all the code I didn't write (usually skeleton/starter code.)
 
-triangles::TriangleList GetTriangles(int small_read) {
-  using TriangleList = typename triangles::TriangleList;
-  using Triangle = typename triangles::Triangle;
-  FILE *f = fopen("tris.txt", "r");
-  if (f == NULL)
-  {
-      fprintf(stderr, "You must place the tris.txt file in the current directory.\n");
-      exit(EXIT_FAILURE);
-  }
-  fseek(f, 0, SEEK_END);
-  int numBytes = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  if (numBytes != 241511792)
-  {
-      fprintf(stderr, "Your tris.txt file is corrupted.  It should be 241511792 bytes, but you only have %d.\n", numBytes);
-      exit(EXIT_FAILURE);
-  }
+char* ReadTuple3(char *tmp, double *v1, double *v2, double *v3) {
+    tmp++; /* left paren */
+    *v1 = atof(tmp);
+    while (*tmp != ',')
+       tmp++;
+    tmp += 2; // comma+space
+    *v2 = atof(tmp);
+    while (*tmp != ',')
+       tmp++;
+    tmp += 2; // comma+space
+    *v3 = atof(tmp);
+    while (*tmp != ')')
+       tmp++;
+    tmp++; /* right paren */
+    return tmp;
+}
 
-  if (small_read == 1)
-  {
-      numBytes = 10000;
-  }
+triangles::TriangleList Get3DTriangles()
+{
+   FILE *f = fopen("tris_w_r_rgb.txt", "r");
+   if (f == NULL)
+   {
+       fprintf(stderr, "You must place the tris_w_r_rgb.txt file in the current directory.\n");
+       exit(EXIT_FAILURE);
+   }
+   fseek(f, 0, SEEK_END);
+   int numBytes = ftell(f);
+   fseek(f, 0, SEEK_SET);
+   if (numBytes != 13488634)
+   {
+       fprintf(stderr, "Your tris_w_r_rgb.txt file is corrupted.  It should be 13488634 bytes, but you have %d.\n", numBytes);
+       exit(EXIT_FAILURE);
+   }
 
-  char *buffer = (char *) malloc(numBytes);
-  if (buffer == NULL)
-  {
-      fprintf(stderr, "Unable to allocate enough memory to load file.\n");
-      exit(EXIT_FAILURE);
-  }
-  
-  fread(buffer, sizeof(char), numBytes, f);
+   char *buffer = (char *) malloc(numBytes);
+   if (buffer == NULL)
+   {
+       fprintf(stderr, "Unable to allocate enough memory to load file.\n");
+       exit(EXIT_FAILURE);
+   }
+   
+   fread(buffer, sizeof(char), numBytes, f);
 
-  char *tmp = buffer;
-  int numTriangles = atoi(tmp);
-  while (*tmp != '\n')
-      tmp++;
-  tmp++;
+   char *tmp = buffer;
+   int numTriangles = atoi(tmp);
+   while (*tmp != '\n')
+       tmp++;
+   tmp++;
  
-  if (numTriangles != 2566541)
-  {
-      fprintf(stderr, "Issue with reading file -- can't establish number of triangles.\n");
-      exit(EXIT_FAILURE);
-  }
+   if (numTriangles != 42281)
+   {
+       fprintf(stderr, "Issue with reading file -- can't establish number of triangles.\n");
+       exit(EXIT_FAILURE);
+   }
 
-  if (small_read == 1)
-      numTriangles = 100;
+   triangles::TriangleList tl;
+   tl.numTriangles = numTriangles;
+   tl.triangles = (triangles::Triangle *) malloc(sizeof(triangles::Triangle)*tl.numTriangles);
 
-  TriangleList tl;
-  tl.numTriangles = numTriangles;
-  tl.triangles = (Triangle *) malloc(sizeof(Triangle)*tl.numTriangles);
+   for (int i = 0 ; i < tl.numTriangles ; i++)
+   {
+       double x1, y1, z1, x2, y2, z2, x3, y3, z3;
+       double r[3], g[3], b[3];
+/*
+ * Weird: sscanf has a terrible implementation for large strings.
+ * When I did the code below, it did not finish after 45 minutes.
+ * Reading up on the topic, it sounds like it is a known issue that
+ * sscanf fails here.  Stunningly, fscanf would have been faster.
+ *     sscanf(tmp, "(%lf, %lf), (%lf, %lf), (%lf, %lf) = (%d, %d, %d)\n%n",
+ *              &x1, &y1, &x2, &y2, &x3, &y3, &r, &g, &b, &numRead);
+ *
+ *  So, instead, do it all with atof/atoi and advancing through the buffer manually...
+ */
+       tmp = ReadTuple3(tmp, &x1, &y1, &z1);
+       tmp += 3; /* space+equal+space */
+       tmp = ReadTuple3(tmp, r+0, g+0, b+0);
+       tmp += 2; /* comma+space */
+       tmp = ReadTuple3(tmp, &x2, &y2, &z2);
+       tmp += 3; /* space+equal+space */
+       tmp = ReadTuple3(tmp, r+1, g+1, b+1);
+       tmp += 2; /* comma+space */
+       tmp = ReadTuple3(tmp, &x3, &y3, &z3);
+       tmp += 3; /* space+equal+space */
+       tmp = ReadTuple3(tmp, r+2, g+2, b+2);
+       tmp++;    /* newline */
 
-  for (int i = 0 ; i < tl.numTriangles ; i++)
-  {
-    double x1, y1, x2, y2, x3, y3;
-    int    r, g, b;
-    /*
-     * Weird: sscanf has a terrible implementation for large strings.
-     * When I did the code below, it did not finish after 45 minutes.
-     * Reading up on the topic, it sounds like it is a known issue that
-     * sscanf fails here.  Stunningly, fscanf would have been faster.
-     *     sscanf(tmp, "(%lf, %lf), (%lf, %lf), (%lf, %lf) = (%d, %d, %d)\n%n",
-     *              &x1, &y1, &x2, &y2, &x3, &y3, &r, &g, &b, &numRead);
-     *
-     *  So, instead, do it all with atof/atoi and advancing through the buffer manually...
-     */
-     tmp++,
-     x1 = atof(tmp);
-     while (*tmp != ',')
-        tmp++;
-     tmp += 2; // comma+space
-     y1 = atof(tmp);
-     while (*tmp != ')')
-        tmp++;
-     tmp += 4; // right-paren+comma+space+left-paren
-     x2 = atof(tmp);
-     while (*tmp != ',')
-        tmp++;
-     tmp += 2; // comma+space
-     y2 = atof(tmp);
-     while (*tmp != ')')
-        tmp++;
-     tmp += 4; // right-paren+comma+space+left-paren
-     x3 = atof(tmp);
-     while (*tmp != ',')
-        tmp++;
-     tmp += 2; // comma+space
-     y3 = atof(tmp);
-     while (*tmp != ')')
-        tmp++;
-     tmp += 5; // right-paren+space+equal+space+left-paren
-     r = atoi(tmp);
-     while (*tmp != ',')
-        tmp++;
-     tmp += 2; // comma+space
-     g = atoi(tmp);
-     while (*tmp != ',')
-        tmp++;
-     tmp += 2; // comma+space
-     b = atoi(tmp);
-     while (*tmp != '\n')
-        tmp++;
-     tmp++; // onto next line
-     
-     tl.triangles[i].X[0] = x1;
-     tl.triangles[i].X[1] = x2;
-     tl.triangles[i].X[2] = x3;
-     tl.triangles[i].Y[0] = y1;
-     tl.triangles[i].Y[1] = y2;
-     tl.triangles[i].Y[2] = y3;
-     tl.triangles[i].color[0] = r;
-     tl.triangles[i].color[1] = g;
-     tl.triangles[i].color[2] = b;
-     //printf("Read triangle %f, %f, %f, %f, %f, %f, %d, %d, %d\n", x1, y1, x2, y2, x3, y3, r, g, b);
-  }
+       tl.triangles[i].X[0] = x1;
+       tl.triangles[i].X[1] = x2;
+       tl.triangles[i].X[2] = x3;
+       tl.triangles[i].Y[0] = y1;
+       tl.triangles[i].Y[1] = y2;
+       tl.triangles[i].Y[2] = y3;
+       tl.triangles[i].Z[0] = z1;
+       tl.triangles[i].Z[1] = z2;
+       tl.triangles[i].Z[2] = z3;
+       tl.triangles[i].color[0][0] = r[0];
+       tl.triangles[i].color[0][1] = g[0];
+       tl.triangles[i].color[0][2] = b[0];
+       tl.triangles[i].color[1][0] = r[1];
+       tl.triangles[i].color[1][1] = g[1];
+       tl.triangles[i].color[1][2] = b[1];
+       tl.triangles[i].color[2][0] = r[2];
+       tl.triangles[i].color[2][1] = g[2];
+       tl.triangles[i].color[2][2] = b[2];
+       //printf("Read triangle (%f, %f, %f) / (%f, %f, %f), (%f, %f, %f) / (%f, %f, %f), (%f, %f, %f) / (%f, %f, %f)\n", x1, y1, z1, r[0], g[0], b[0], x2, y2, z2, r[1], g[1], b[1], x3, y3, z3, r[2], g[2], b[2]);
+   }
 
-  free(buffer);
-  return tl;
+   free(buffer);
+   return tl;
 }
 
 } // namespace skel
@@ -598,8 +862,8 @@ using TriangleList = typename triangles::TriangleList;
 int main() {
     cout << "Generating image" << endl;
 
-    Image x = Image(1786, 1344);
-    TriangleList list = skel::GetTriangles(0);
+    Image x = Image(1000, 1000);
+    TriangleList list = skel::Get3DTriangles();
 
     for (int i=0; i < list.numTriangles; ++i)
       algorithms::RasterizeGoingUpTriangle(list.triangles[i], x);

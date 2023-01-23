@@ -1,0 +1,45 @@
+#!/bin/ksh
+
+if [[ ! -f proj1D_soln.pnm ]] ; then
+   echo "You must download proj1D_soln.pnm and place it in this directory."
+   echo "Giving up"
+   exit 1
+fi
+
+if [[ -f proj1D.c ]] ; then
+    echo "Working with C file proj1D.c"
+    gcc proj1D.c -lm
+    if [[ $? != 0 ]] ; then
+       echo "Compile failed, giving up."
+       exit 1
+    fi
+    echo "Successful compile"
+elif [[ -f proj1D.cpp ]] ; then
+    echo "Working with C++ file proj1D.cpp"
+    g++ proj1D.cpp -lm
+    if [[ $? != 0 ]] ; then
+       echo "Compile failed, giving up."
+       exit 1
+    fi
+    echo "Successful compile"
+fi
+
+rm -f proj1D_out.pnm
+./a.out
+if [[ ! -f proj1D_out.pnm ]] ; then
+    echo "Compiled program and ran it, but a.out did not produce proj1D_out.pnm"
+    echo "Giving up"
+    exit 1
+fi
+
+diff proj1D_out.pnm proj1D_soln.pnm
+
+if [[ $? != 0 ]] ; then
+    echo "Compiled program and ran it, but the output does not match the reference solution."
+    echo "Keep going and find out why they are not the same."
+    exit 1
+fi
+
+echo "Looks like success -- compiled, ran, and compared with the reference solution and they match.  (CONGRATS)"
+exit 0
+   

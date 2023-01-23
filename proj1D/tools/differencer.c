@@ -13,18 +13,24 @@ int main(int argc, char *argv[])
     char *filename1 = argv[1];
     char *filename2 = argv[2];
 
-    FILE *f1 = fopen(filename1, "r");
+    FILE *f1 = fopen(filename1, "rb");
     if (f1 == NULL)
     {
         fprintf(stderr, "Unable to open \"%s\" for reading\n", filename1);
         exit(EXIT_FAILURE);
     }
-    FILE *f2 = fopen(filename2, "r");
+    fseek(f1, 0, SEEK_END);
+    int filesize1 = ftell(f1);
+    fseek(f1, 0, SEEK_SET);
+    FILE *f2 = fopen(filename2, "rb");
     if (f2 == NULL)
     {
         fprintf(stderr, "Unable to open \"%s\" for reading\n", filename2);
         exit(EXIT_FAILURE);
     }
+    fseek(f2, 0, SEEK_END);
+    int filesize2 = ftell(f2);
+    fseek(f2, 0, SEEK_SET);
 
     char p6[1024];
     int  f1x, f1y, max1;
@@ -66,10 +72,28 @@ int main(int argc, char *argv[])
     int numbytes  = numpixels*3;
     unsigned char *buffer1 = (unsigned char *) malloc(numbytes);
     unsigned char *buffer2 = (unsigned char *) malloc(numbytes);
+
+    int curpos1 = ftell(f1);
+    if (filesize1 != curpos1 + numbytes)
+    {
+        fprintf(stderr, "Possible corruption of \"%s\".  The header information took %d bytes and the data should be %d bytes for a total of %d bytes.  But the file \"%s\" has different number of bytes: %d.\n", filename1, curpos1, numbytes, curpos1+numbytes, filename1, filesize1);
+        exit(EXIT_FAILURE);
+    }
+
+    int curpos2 = ftell(f2);
+    if (filesize2 != curpos2 + numbytes)
+    {
+        fprintf(stderr, "Possible corruption of \"%s\".  The header information took %d bytes and the data should be %d bytes for a total of %d bytes.  But the file \"%s\" has a different number of bytes: %d.\n", filename2, curpos2, numbytes, curpos2+numbytes, filename2, filesize2);
+        exit(EXIT_FAILURE);
+    }
+
     fread(buffer1, sizeof(unsigned char), numbytes, f1);
     fread(buffer2, sizeof(unsigned char), numbytes, f2);
 
+    FILE *f_out = fopen("differences.pnm", "wb");
+    fprintf(f_out, "P6\n%d %d\n255\n", nx, ny);
     int totalDiff = 0;
+    unsigned char *diff_buff = malloc(3*nx*ny);
     for (int R = ny-1 ; R >= 0 ; R--)
     {
         for (int C = 0 ; C < nx ; C++)
@@ -87,15 +111,28 @@ int main(int argc, char *argv[])
                         filename2, buffer2[3*index+0], buffer2[3*index+1], buffer2[3*index+2]);
                 totalDiff++;
 /*
-                if (totalDiff > 20)
+                if (totalDiff > 100)
                 {
-                    printf("Stopping print statements after 20 different pixels found.  There may be more pixels that are different.\n");
+                    printf("Stopping print statements after 100 different pixels found.  There may be more pixels that are different.\n");
                     exit(EXIT_FAILURE);
                 }
  */
+                int index_rev = (R)*nx+C;
+                diff_buff[3*index_rev+0] = 255;
+                diff_buff[3*index_rev+1] = 255;
+                diff_buff[3*index_rev+2] = 255;
+            }
+            else
+            {
+                int index_rev = (R)*nx+C;
+                diff_buff[3*index_rev+0] = buffer1[3*index+0];
+                diff_buff[3*index_rev+1] = buffer1[3*index+1];
+                diff_buff[3*index_rev+2] = buffer1[3*index+2];
             }
         }
     }
+    fwrite(diff_buff, sizeof(unsigned char), 3*nx*ny, f_out);
+    fclose(f_out);
     if (totalDiff > 0)
     {
         printf("The number of different pixels is %d\n", totalDiff);

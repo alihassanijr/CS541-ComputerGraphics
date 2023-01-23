@@ -11,8 +11,11 @@ clean:
 	rm -f test/proj1D_out.pnm
 	rm -f test/proj1D_out.png
 	rm -f test/a.out
+	rm -f test/soln.png
 	rm -f tools/a.out
 	rm -f differ
+	rm -f diff.png
+	rm -f differences.pnm
 
 build:
 	@echo "Compiling"
@@ -27,7 +30,7 @@ convert:
 	pnmtopng proj1D_out.pnm >> proj1D_out.png
 
 test:
-	@echo "Testing against checker"
+	@echo "Testing against reference"
 	cp proj1D.cpp test/
 	cd test/ && ./proj1D_checker && rm a.out && rm proj1D.cpp
 
@@ -36,4 +39,3 @@ diff:
 	gcc tools/differencer.c -o differ
 	./differ proj1D_out.pnm test/proj1D_soln.pnm
 	rm differ
-

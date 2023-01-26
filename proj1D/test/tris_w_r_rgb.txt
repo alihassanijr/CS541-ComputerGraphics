@@ -1,0 +1,1 @@
+../tris_w_r_rgb.txt

@@ -1,0 +1,2 @@
+proj1D/tris_w_r_rgb.txt filter=lfs diff=lfs merge=lfs -text
+proj1C/tris.txt filter=lfs diff=lfs merge=lfs -text

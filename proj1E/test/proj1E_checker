@@ -1,0 +1,60 @@
+#!/bin/ksh
+
+if [[ ! -f proj1E_soln_frame0000.pnm || ! -f proj1E_soln_frame0250.pnm || ! -f proj1E_soln_frame0500.pnm || ! -f proj1E_soln_frame0750.pnm ]] ; then
+   echo "You must download the proj1E_soln.pnm's for frames 0000, 0250, 0500, and 0750 and place them in this directory."
+   echo "Giving up"
+   exit 1
+fi
+
+if [[ ! -f counter.c ]] ; then
+   echo "You need counter.c"
+   echo "Giving up"
+   exit 1
+fi
+   
+rm -f counter
+gcc -o counter counter.c
+
+if [[ ! -f counter ]] ; then
+   echo "Unable to compiler counter program"
+   echo "Giving up"
+   exit 1
+fi
+   
+if [[ -f proj1E.c ]] ; then
+    echo "Working with C file proj1E.c"
+    gcc proj1E.c -lm
+    if [[ $? != 0 ]] ; then
+       echo "Compile failed, giving up."
+       exit 1
+    fi
+    echo "Successful compile"
+elif [[ -f proj1E.cpp ]] ; then
+    echo "Working with C++ file proj1E.cpp"
+    g++ proj1E.cpp -lm
+    if [[ $? != 0 ]] ; then
+       echo "Compile failed, giving up."
+       exit 1
+    fi
+    echo "Successful compile"
+fi
+
+rm -f proj1E_frame*.pnm
+./a.out
+if [[ ! -f proj1E_frame0750.pnm ]] ; then
+    echo "Compiled program and ran it, but a.out did not produce proj1E_frame0750.pnm"
+    echo "Giving up"
+    exit 1
+fi
+
+for i in 0000 0250 0500 0750 ; do
+   ./counter proj1E_frame${i}.pnm proj1E_soln_frame${i}.pnm
+   if [[ $? != 0 ]] ; then
+       echo "Counter program believes there are more than 200 pixels of difference for proj1E_frame${i}.pnm."
+       exit 1
+   fi
+done
+
+echo "Looks like success -- compiled, ran, and compared with the reference solutions and they match.  (CONGRATS)"
+exit 0
+   

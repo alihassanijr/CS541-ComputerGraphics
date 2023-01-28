@@ -2,7 +2,7 @@
 
 Ali Hassani
 
-Project 1-D
+Project 1-E
 
 CS 441/541
 
@@ -24,6 +24,12 @@ namespace project {
 
 namespace math {
 // namespace math contains all math operations.
+
+// Cotangent
+template <typename T>
+T cot(T v) {
+  return T(1.0) / tan(v);
+}
 
 /// Value swap
 template <typename T>
@@ -83,6 +89,221 @@ T abs_difference(T a, T b) {
 }
 
 } // namespace math
+
+////////////////////////////////////////////////////////////////////////////////////////
+
+namespace linalg {
+// namespace linalg holds all linear algebra routines and sturcts.
+
+template <typename T, int M_>
+struct Vector {
+  T data[M_];
+  static const int Size = M_;
+  static const int M = M_;
+
+  Vector() {}
+
+  Vector(T* _data) {
+    for (int i=0; i < Size; ++i)
+      data[i] = _data[i];
+  }
+
+  Vector operator*(const T b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] * b;
+    return c;
+  }
+  Vector operator/(const T b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] / b;
+    return c;
+  }
+  Vector operator+(const T b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] + b;
+    return c;
+  }
+  Vector operator-(const T b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] - b;
+    return c;
+  }
+
+  Vector operator*(const Vector &b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] * b.data[i];
+    return c;
+  }
+  Vector operator/(const Vector &b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] / b.data[i];
+    return c;
+  }
+  Vector operator+(const Vector &b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] + b.data[i];
+    return c;
+  }
+  Vector operator-(const Vector &b) {
+    Vector c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] - b.data[i];
+    return c;
+  }
+
+  T get(int index) {
+    assert(index >= 0 && index < Size);
+    return data[index];
+  }
+  void set(int index, T value) {
+    assert(index >= 0 && index < Size);
+    data[index] = value;
+  }
+
+  T norm() {
+    T norm = T(0.0);
+    for (int i=0; i < Size; ++i)
+      norm += pow(data[i], 2);
+    return sqrt(norm);
+  }
+
+  T sum() {
+    T acc = T(0.0);
+    for (int i=0; i < Size; ++i) {
+      acc += data[i];
+    }
+    return acc;
+  }
+};
+
+template <typename T, int M_, int N_>
+struct Matrix {
+  T data[M_*N_];
+  static const int Size = M_ * N_;
+  static const int M = M_;
+  static const int N = N_;
+
+  Matrix() {}
+
+  Matrix(T* _data) {
+    for (int i=0; i < Size; ++i)
+      data[i] = _data[i];
+  }
+  Matrix(T fill_val) {
+    for (int i=0; i < Size; ++i)
+      data[i] = fill_val;
+  }
+
+  Matrix operator*(const T b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] * b;
+    return c;
+  }
+  Matrix operator/(const T b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] / b;
+    return c;
+  }
+  Matrix operator+(const T b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] + b;
+    return c;
+  }
+  Matrix operator-(const T b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] - b;
+    return c;
+  }
+
+  Matrix operator*(const Matrix &b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] * b.data[i];
+    return c;
+  }
+  Matrix operator/(const Matrix &b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] / b.data[i];
+    return c;
+  }
+  Matrix operator+(const Matrix &b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] + b.data[i];
+    return c;
+  }
+  Matrix operator-(const Matrix &b) {
+    Matrix c;
+    for (int i=0; i < Size; ++i)
+      c.data[i] = this->data[i] - b.data[i];
+    return c;
+  }
+
+  T get(int index_i, int index_j) {
+    assert(index_i >= 0 && index_i < M && index_j >= 0 && index_j < N);
+    return data[index_i * N + index_j];
+  }
+  void set(int index_i, int index_j, T value) {
+    assert(index_i >= 0 && index_i < M && index_j >= 0 && index_j < N);
+    data[index_i * N + index_j] = value;
+  }
+
+  operator Vector<T, N>() const {
+    static_assert(M == 1);
+    Vector<T, N> c(this->data);
+  }
+};
+
+//template <typename T, int M_, int N_>
+//Vector<T, M_> matmul(Vector<T, M_> a, Matrix<T, M_, N_> b) {
+//  Vector<T, N_> c;
+//  for (int n=0; n < N_; ++n) {
+//    T val = T(0.0);
+//    for (int k=0; k < M_; ++k) {
+//      val += a.get(k) * b.get(k, n);
+//    }
+//    c.set(n, val);
+//  }
+//  return c;
+//}
+
+template <typename T, int M_, int N_, int K_>
+Matrix<T, M_, N_> matmul(Matrix<T, M_, K_> a, Matrix<T, K_, N_> b) {
+  Matrix<T, M_, N_> c(T(0.0));
+  for (int k=0; k < K_; ++k) {
+    for (int m=0; m < M_; ++m) {
+      for (int n=0; n < N_; ++n) {
+        T val = c.get(m, n);
+        val += a.get(m, k) * b.get(k, n);
+        c.set(m, n, val);
+      }
+    }
+  }
+  return c;
+}
+
+template <typename T>
+Vector<T, 3> cross_prod(Vector<T, 3> a, Vector<T, 3> b) {
+  Vector<T, 3> c;
+  c.set(0, a.get(1) * b.get(2) - a.get(2) * b.get(1));
+  c.set(1, a.get(2) * b.get(0) - a.get(0) * b.get(2)); // -1 already applied
+  c.set(2, a.get(0) * b.get(1) - a.get(1) * b.get(0));
+  return c;
+}
+
+} // namespace linalg
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -236,6 +457,14 @@ struct Vertex {
   double z() const {
     return Z[0];
   }
+
+  operator linalg::Vector<double, 3>() const {
+    linalg::Vector<double, 3> v;
+    v.set(0, X[0]);
+    v.set(1, Y[0]);
+    v.set(2, Z[0]);
+    return v;
+  }
 };
 
 /// Triangle
@@ -322,28 +551,28 @@ struct TriangleList {
 
 namespace geometry {
 
-struct Coord {
+struct Coord2D {
   double* X;
   double* Y;
 
-  Coord(double x, double y) {
+  Coord2D(double x, double y) {
     X = new double[1];
     Y = new double[1];
     X[0] = x;
     Y[0] = y;
   }
 
-  Coord(double &x, double &y) {
+  Coord2D(double &x, double &y) {
     X = &x;
     Y = &y;
   }
 
-  Coord(double *x, double *y) {
+  Coord2D(double *x, double *y) {
     X = x;
     Y = y;
   }
 
-  Coord(triangles::Vertex v) {
+  Coord2D(triangles::Vertex v) {
     X = v.X;
     Y = v.Y;
   }
@@ -355,29 +584,29 @@ struct Coord {
     return Y[0];
   }
 
-  Coord operator*(const Coord &b) {
-    Coord c(new double[1], new double[1]);
+  Coord2D operator*(const Coord2D &b) {
+    Coord2D c(new double[1], new double[1]);
     c.X[0] = this->x() * b.x();
     c.Y[0] = this->y() * b.y();
     return c;
   }
 
-  Coord operator/(const Coord &b) {
-    Coord c(new double[1], new double[1]);
+  Coord2D operator/(const Coord2D &b) {
+    Coord2D c(new double[1], new double[1]);
     c.X[0] = this->x() / b.x();
     c.Y[0] = this->y() / b.y();
     return c;
   }
 
-  Coord operator+(const Coord &b) {
-    Coord c(new double[1], new double[1]);
+  Coord2D operator+(const Coord2D &b) {
+    Coord2D c(new double[1], new double[1]);
     c.X[0] = this->x() + b.x();
     c.Y[0] = this->y() + b.y();
     return c;
   }
 
-  Coord operator-(const Coord &b) {
-    Coord c(new double[1], new double[1]);
+  Coord2D operator-(const Coord2D &b) {
+    Coord2D c(new double[1], new double[1]);
     c.X[0] = this->x() - b.x();
     c.Y[0] = this->y() - b.y();
     return c;
@@ -390,6 +619,83 @@ struct Coord {
   operator triangles::Color() const {
     double c = std::sqrt(std::pow(x(), 2) + std::pow(y(), 2));
     return triangles::Color(c, c, c);
+  }
+
+  operator linalg::Vector<double, 2>() const {
+    linalg::Vector<double, 2> v;
+    v.set(0, X[0]);
+    v.set(1, Y[0]);
+    return v;
+  }
+};
+
+struct Coord3D {
+  linalg::Vector<double, 3> vec;
+
+  Coord3D(double x, double y, double z) {
+    vec.data[0] = x;
+    vec.data[1] = y;
+    vec.data[2] = z;
+  }
+
+  Coord3D(double *x, double *y, double *z) {
+    vec.data[0] = x[0];
+    vec.data[1] = y[0];
+    vec.data[2] = z[0];
+  }
+
+  Coord3D(triangles::Vertex v) {
+    vec.data[0] = v.X[0];
+    vec.data[1] = v.Y[0];
+    vec.data[2] = v.Z[0];
+  }
+
+  Coord3D(linalg::Vector<double, 3> v) {
+    vec.data[0] = v.data[0];
+    vec.data[1] = v.data[1];
+    vec.data[2] = v.data[2];
+  }
+
+  double x() const {
+    return vec.data[0];
+  }
+  double y() const {
+    return vec.data[1];
+  }
+  double z() const {
+    return vec.data[2];
+  }
+
+  Coord3D operator*(const Coord3D &b) {
+    Coord3D c(new double[1], new double[1], new double[1]);
+    c.vec.data[0] = this->x() * b.x();
+    c.vec.data[1] = this->y() * b.y();
+    c.vec.data[2] = this->z() * b.z();
+    return c;
+  }
+
+  Coord3D operator/(const Coord3D &b) {
+    Coord3D c(new double[1], new double[1], new double[1]);
+    c.vec.data[0] = this->x() / b.x();
+    c.vec.data[1] = this->y() / b.y();
+    c.vec.data[2] = this->z() / b.z();
+    return c;
+  }
+
+  Coord3D operator+(const Coord3D &b) {
+    Coord3D c(new double[1], new double[1], new double[1]);
+    c.vec.data[0] = this->x() + b.x();
+    c.vec.data[1] = this->y() + b.y();
+    c.vec.data[2] = this->z() + b.z();
+    return c;
+  }
+
+  Coord3D operator-(const Coord3D &b) {
+    Coord3D c(new double[1], new double[1], new double[1]);
+    c.vec.data[0] = this->x() - b.x();
+    c.vec.data[1] = this->y() - b.y();
+    c.vec.data[2] = this->z() - b.z();
+    return c;
   }
 };
 
@@ -609,11 +915,163 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
+namespace views {
+// namespace views
+
+struct Camera {
+  using Coord = typename geometry::Coord3D;
+
+  double near, far;
+  double angle;
+  Coord position;
+  Coord focus;
+  Coord up;
+
+  Camera (Coord position, Coord focus, Coord up, double angle, double near, double far) :
+    position(position),
+    focus(focus),
+    up(up),
+    angle(angle),
+    near(near),
+    far(far) {}
+};
+
+} // namespace views
+
+////////////////////////////////////////////////////////////////////////////////////////
+
+namespace transforms {
+
+using Transform = typename linalg::Matrix<double, 4, 4>;
+
+Transform zeros() {
+  return Transform(0.0d);
+}
+
+Transform identity() {
+  Transform transform = zeros();
+  transform.set(0, 0, 1.0d);
+  transform.set(1, 1, 1.0d);
+  transform.set(2, 2, 1.0d);
+  transform.set(3, 3, 1.0d);
+  return transform;
+}
+
+Transform compose(vector<Transform> transforms) {
+  Transform composed = identity();
+  
+  for (Transform t : transforms) {
+    composed = matmul(composed, t);
+  }
+
+  return composed;
+}
+
+// image_to_device: device transform
+Transform image_to_device(double height, double width) {
+  Transform transform = zeros();
+
+  //double scale = min(height, width) / 2;
+  double scale_h = height / 2;
+  double scale_w = width / 2;
+  transform.set(0, 0, scale_w);
+  transform.set(1, 1, scale_h);
+  transform.set(2, 2, 1.0d);
+  transform.set(3, 0, scale_w);
+  transform.set(3, 1, scale_h);
+  transform.set(3, 3, 1.0d);
+
+  return transform;
+}
+
+// world_to_camera: camera transform
+Transform world_to_camera(views::Camera camera) {
+  Transform transform = zeros();
+
+  linalg::Vector w_ = (camera.position - camera.focus).vec;
+  w_ = (w_) / (w_.norm());
+  linalg::Vector u_ = linalg::cross_prod<double>(camera.up.vec, w_);
+  u_ = (u_) / (u_.norm());
+  linalg::Vector v_ = linalg::cross_prod<double>(w_, u_);
+  v_ = (v_) / (v_.norm());
+  linalg::Vector t_ = (geometry::Coord3D(0.0d, 0.0d, 0.0d) - camera.position).vec;
+
+  geometry::Coord3D w = geometry::Coord3D(w_);
+  geometry::Coord3D u = geometry::Coord3D(u_);
+  geometry::Coord3D v = geometry::Coord3D(v_);
+  geometry::Coord3D t = geometry::Coord3D(t_);
+
+  transform.set(0, 0, u.x());
+  transform.set(0, 1, v.x());
+  transform.set(0, 2, w.x());
+  transform.set(1, 0, u.y());
+  transform.set(1, 1, v.y());
+  transform.set(1, 2, w.y());
+  transform.set(2, 0, u.z());
+  transform.set(2, 1, v.z());
+  transform.set(2, 2, w.z());
+
+  transform.set(3, 0, (u.vec * t.vec).sum());
+  transform.set(3, 1, (v.vec * t.vec).sum());
+  transform.set(3, 2, (w.vec * t.vec).sum());
+  transform.set(3, 3, 1.0d);
+
+  return transform;
+}
+
+// camera_to_image: view transform
+Transform camera_to_image(views::Camera camera) {
+  Transform transform = zeros();
+
+  double cot_alpha_div_2 = math::cot(camera.angle / 2);
+  double n = camera.near;
+  double f = camera.far;
+
+  transform.set(0, 0, cot_alpha_div_2);
+  transform.set(1, 1, cot_alpha_div_2);
+  transform.set(2, 2, (f + n) / (f - n));
+  transform.set(3, 2, (2 * f * n) / (f - n));
+
+  transform.set(2, 3, -1.0d);
+
+  return transform;
+}
+
+Transform world_to_device(views::Camera camera, double height, double width) {
+  Transform w2c = world_to_camera(camera);
+  Transform c2i = camera_to_image(camera);
+  Transform i2d = image_to_device(height, width);
+
+  return compose({w2c, c2i, i2d});
+}
+
+triangles::Triangle transform_triangle(Transform transform, triangles::Triangle triangle) {
+  linalg::Matrix<double, 3, 4> trig(0.0d);
+  for (int i=0; i < 3; ++i) {
+    trig.set(i, 0, triangle.X[i]);
+    trig.set(i, 1, triangle.Y[i]);
+    trig.set(i, 2, triangle.Z[i]);
+    trig.set(i, 3, 1.0d);
+  }
+  trig = linalg::matmul(trig, transform);
+  for (int i=0; i < 3; ++i) {
+    double w = trig.get(i, 3);
+    triangle.X[i] = trig.get(i, 0) / w;
+    triangle.Y[i] = trig.get(i, 1) / w;
+    triangle.Z[i] = trig.get(i, 2) / w;
+  }
+  return triangle;
+}
+
+} // namespace transforms
+
+////////////////////////////////////////////////////////////////////////////////////////
+
 namespace algorithms {
 
 void fillTriangle(
-    triangles::Triangle &t, 
-    image::Image &x, 
+    triangles::Triangle t, 
+    image::Image image, 
     double rowMin, 
     double rowMax, 
     triangles::Vertex anchor, 
@@ -628,30 +1086,30 @@ void fillTriangle(
     for (int r=math::C441(rowMin); r <= math::F441(rowMax); ++r) {
       double leftEnd  =   leftEdge.leftIntersection(r);
       double rightEnd = rightEdge.rightIntersection(r);
-      double leftZ = math::lerp<geometry::Coord, double>(
-          geometry::Coord(left), 
-          geometry::Coord(anchor), 
+      double leftZ = math::lerp<geometry::Coord2D, double>(
+          geometry::Coord2D(left), 
+          geometry::Coord2D(anchor), 
           left.z(), 
           anchor.z(), 
-          geometry::Coord(leftEnd, r));
-      double rightZ = math::lerp<geometry::Coord, double>(
-          geometry::Coord(right), 
-          geometry::Coord(anchor), 
+          geometry::Coord2D(leftEnd, r));
+      double rightZ = math::lerp<geometry::Coord2D, double>(
+          geometry::Coord2D(right), 
+          geometry::Coord2D(anchor), 
           right.z(), 
           anchor.z(), 
-          geometry::Coord(rightEnd, r));
-      triangles::Color leftColorX = math::lerp<geometry::Coord, triangles::Color>(
-          geometry::Coord(left), 
-          geometry::Coord(anchor), 
+          geometry::Coord2D(rightEnd, r));
+      triangles::Color leftColorX = math::lerp<geometry::Coord2D, triangles::Color>(
+          geometry::Coord2D(left), 
+          geometry::Coord2D(anchor), 
           leftColor, 
           anchorColor, 
-          geometry::Coord(leftEnd, r));
-      triangles::Color rightColorX = math::lerp<geometry::Coord, triangles::Color>(
-          geometry::Coord(right), 
-          geometry::Coord(anchor), 
+          geometry::Coord2D(leftEnd, r));
+      triangles::Color rightColorX = math::lerp<geometry::Coord2D, triangles::Color>(
+          geometry::Coord2D(right), 
+          geometry::Coord2D(anchor), 
           rightColor, 
           anchorColor, 
-          geometry::Coord(rightEnd, r));
+          geometry::Coord2D(rightEnd, r));
       if (leftEnd >= rightEnd) {
         math::swap<double>(&leftZ, &rightZ);
         math::swap<triangles::Color>(&leftColorX, &rightColorX);
@@ -670,14 +1128,13 @@ void fillTriangle(
             leftColorX, 
             rightColorX, 
             c);
-        x.set_pixel(r, c, z, image::Pixel(color.colors[0], color.colors[1], color.colors[2]));
-        //x.set_pixel(r, c, z, image::Pixel(t.color[0]));
+        image.set_pixel(r, c, z, image::Pixel(color.colors[0], color.colors[1], color.colors[2]));
       }
     }
   }
 }
 
-void fillBottomTriangle(triangles::Triangle &t, image::Image &x) {
+void fillBottomTriangle(triangles::Triangle t, image::Image image) {
   double rowMinD = t.bottom().y();
   double rowMaxD = t.middle().y();
   triangles::Vertex anchor = t.bottom();
@@ -686,10 +1143,10 @@ void fillBottomTriangle(triangles::Triangle &t, image::Image &x) {
   triangles::Color anchorColor =       t.bottom_color();
   triangles::Color   leftColor =  t.bottom_left_color();
   triangles::Color  rightColor = t.bottom_right_color();
-  fillTriangle(t, x, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
+  fillTriangle(t, image, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
 }
 
-void fillTopTriangle(triangles::Triangle &t, image::Image &x) {
+void fillTopTriangle(triangles::Triangle &t, image::Image image) {
   double rowMinD = t.middle().y();
   double rowMaxD = t.top().y();
   triangles::Vertex anchor = t.top();
@@ -698,14 +1155,14 @@ void fillTopTriangle(triangles::Triangle &t, image::Image &x) {
   triangles::Color anchorColor =       t.top_color();
   triangles::Color   leftColor =  t.top_left_color();
   triangles::Color  rightColor = t.top_right_color();
-  fillTriangle(t, x, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
+  fillTriangle(t, image, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
 }
 
-void RasterizeGoingUpTriangle(triangles::Triangle &t, image::Image &x) {
+void RasterizeGoingUpTriangle(triangles::Triangle t, image::Image image) {
   t.precompute_sorts();
 
-  fillBottomTriangle(t, x);
-  fillTopTriangle(   t, x);
+  fillBottomTriangle(t, image);
+  fillTopTriangle(   t, image);
 }
 
 } // namespace algorithms
@@ -738,37 +1195,36 @@ void Image2PNM(image::Image img, string fn) {
 namespace skel {
 // namespace skel holds all the code I didn't write (usually skeleton/starter code.)
 
-char* ReadTuple3(char *tmp, double *v1, double *v2, double *v3) {
-    tmp++; /* left paren */
+char *
+Read3Numbers(char *tmp, double *v1, double *v2, double *v3)
+{
     *v1 = atof(tmp);
-    while (*tmp != ',')
+    while (*tmp != ' ')
        tmp++;
-    tmp += 2; // comma+space
+    tmp++; /* space */
     *v2 = atof(tmp);
-    while (*tmp != ',')
+    while (*tmp != ' ')
        tmp++;
-    tmp += 2; // comma+space
+    tmp++; /* space */
     *v3 = atof(tmp);
-    while (*tmp != ')')
+    while (*tmp != ' ' && *tmp != '\n')
        tmp++;
-    tmp++; /* right paren */
     return tmp;
 }
 
-triangles::TriangleList Get3DTriangles()
-{
-   FILE *f = fopen("tris_w_r_rgb.txt", "r");
+triangles::TriangleList Get3DTriangles() {
+   FILE *f = fopen("ws_tris.txt", "r");
    if (f == NULL)
    {
-       fprintf(stderr, "You must place the tris_w_r_rgb.txt file in the current directory.\n");
+       fprintf(stderr, "You must place the ws_tris.txt file in the current directory.\n");
        exit(EXIT_FAILURE);
    }
    fseek(f, 0, SEEK_END);
    int numBytes = ftell(f);
    fseek(f, 0, SEEK_SET);
-   if (numBytes != 13488634)
+   if (numBytes != 3892295)
    {
-       fprintf(stderr, "Your tris_w_r_rgb.txt file is corrupted.  It should be 13488634 bytes, but you have %d.\n", numBytes);
+       fprintf(stderr, "Your ws_tris.txt file is corrupted.  It should be 3892295 bytes, but you have %d.\n", numBytes);
        exit(EXIT_FAILURE);
    }
 
@@ -787,7 +1243,7 @@ triangles::TriangleList Get3DTriangles()
        tmp++;
    tmp++;
  
-   if (numTriangles != 42281)
+   if (numTriangles != 14702)
    {
        fprintf(stderr, "Issue with reading file -- can't establish number of triangles.\n");
        exit(EXIT_FAILURE);
@@ -799,8 +1255,11 @@ triangles::TriangleList Get3DTriangles()
 
    for (int i = 0 ; i < tl.numTriangles ; i++)
    {
-       double x1, y1, z1, x2, y2, z2, x3, y3, z3;
-       double r[3], g[3], b[3];
+       for (int j = 0 ; j < 3 ; j++)
+       {
+           double x, y, z;
+           double r, g, b;
+           double normals[3];
 /*
  * Weird: sscanf has a terrible implementation for large strings.
  * When I did the code below, it did not finish after 45 minutes.
@@ -811,42 +1270,60 @@ triangles::TriangleList Get3DTriangles()
  *
  *  So, instead, do it all with atof/atoi and advancing through the buffer manually...
  */
-       tmp = ReadTuple3(tmp, &x1, &y1, &z1);
-       tmp += 3; /* space+equal+space */
-       tmp = ReadTuple3(tmp, r+0, g+0, b+0);
-       tmp += 2; /* comma+space */
-       tmp = ReadTuple3(tmp, &x2, &y2, &z2);
-       tmp += 3; /* space+equal+space */
-       tmp = ReadTuple3(tmp, r+1, g+1, b+1);
-       tmp += 2; /* comma+space */
-       tmp = ReadTuple3(tmp, &x3, &y3, &z3);
-       tmp += 3; /* space+equal+space */
-       tmp = ReadTuple3(tmp, r+2, g+2, b+2);
-       tmp++;    /* newline */
+           tmp = Read3Numbers(tmp, &x, &y, &z);
+           tmp += 3; /* space+slash+space */
+           tmp = Read3Numbers(tmp, &r, &g, &b);
+           tmp += 3; /* space+slash+space */
+           tmp = Read3Numbers(tmp, normals+0, normals+1, normals+2);
+           tmp++;    /* newline */
 
-       tl.triangles[i].X[0] = x1;
-       tl.triangles[i].X[1] = x2;
-       tl.triangles[i].X[2] = x3;
-       tl.triangles[i].Y[0] = y1;
-       tl.triangles[i].Y[1] = y2;
-       tl.triangles[i].Y[2] = y3;
-       tl.triangles[i].Z[0] = z1;
-       tl.triangles[i].Z[1] = z2;
-       tl.triangles[i].Z[2] = z3;
-       tl.triangles[i].color[0][0] = r[0];
-       tl.triangles[i].color[0][1] = g[0];
-       tl.triangles[i].color[0][2] = b[0];
-       tl.triangles[i].color[1][0] = r[1];
-       tl.triangles[i].color[1][1] = g[1];
-       tl.triangles[i].color[1][2] = b[1];
-       tl.triangles[i].color[2][0] = r[2];
-       tl.triangles[i].color[2][1] = g[2];
-       tl.triangles[i].color[2][2] = b[2];
-       //printf("Read triangle (%f, %f, %f) / (%f, %f, %f), (%f, %f, %f) / (%f, %f, %f), (%f, %f, %f) / (%f, %f, %f)\n", x1, y1, z1, r[0], g[0], b[0], x2, y2, z2, r[1], g[1], b[1], x3, y3, z3, r[2], g[2], b[2]);
+           tl.triangles[i].X[j] = x;
+           tl.triangles[i].Y[j] = y;
+           tl.triangles[i].Z[j] = z;
+           tl.triangles[i].color[j][0] = r;
+           tl.triangles[i].color[j][1] = g;
+           tl.triangles[i].color[j][2] = b;
+       }
    }
 
    free(buffer);
    return tl;
+}
+
+double SineParameterize(int curFrame, int nFrames, int ramp)
+{
+    int nNonRamp = nFrames-2*ramp;
+    double height = 1./(nNonRamp + 4*ramp/M_PI);
+    if (curFrame < ramp)
+    {
+        double factor = 2*height*ramp/M_PI;
+        double eval = cos(M_PI/2*((double)curFrame)/ramp);
+        return (1.-eval)*factor;
+    }
+    else if (curFrame > nFrames-ramp)
+    {
+        int amount_left = nFrames-curFrame;
+        double factor = 2*height*ramp/M_PI;
+        double eval =cos(M_PI/2*((double)amount_left/ramp));
+        return 1. - (1-eval)*factor;
+    }
+    double amount_in_quad = ((double)curFrame-ramp);
+    double quad_part = amount_in_quad*height;
+    double curve_part = height*(2*ramp)/M_PI;
+    return quad_part+curve_part;
+}
+
+views::Camera GetCamera(int frame, int nframes) {
+    using Coord = typename geometry::Coord3D;
+    using Camera = typename views::Camera;
+    double t = SineParameterize(frame, nframes, nframes/10);
+    Coord position(40.0d*sin(2*M_PI*t), 40.0d*cos(2*M_PI*t), 40.0d);
+    Coord focus(0.0d, 0.0d, 0.0d);
+    Coord up(0.0d, 1.0d, 0.0d);
+    double near = 5.0d;
+    double far = 200.0d;
+    double angle = M_PI/6;
+    return Camera(position, focus, up, angle, near, far);
 }
 
 } // namespace skel
@@ -855,22 +1332,37 @@ triangles::TriangleList Get3DTriangles()
 
 } // namespace project
 
+string gen_filename(int f) {
+  char str[256];
+  sprintf(str, "proj1E_frame%04d.pnm", f);
+  return str;
+}
+
+
 using namespace project;
 using Image = typename image::Image;
+using Camera = typename views::Camera;
 using TriangleList = typename triangles::TriangleList;
+using Transform = typename transforms::Transform;
 
 int main() {
-    cout << "Generating image" << endl;
-
-    Image x = Image(1000, 1000);
+    int height = 1000;
+    int width  = 1000;
+    Image image = Image(width, height);
     TriangleList list = skel::Get3DTriangles();
 
-    for (int i=0; i < list.numTriangles; ++i)
-      algorithms::RasterizeGoingUpTriangle(list.triangles[i], x);
+    for (int f=0; f < 1000; ++f) {
+      if (f % 250 != 0)
+        continue;
 
-    cout << "Saving image" << endl;
+      image.zfill();
+      Camera camera = skel::GetCamera(f, 1000);
+      Transform transform = transforms::world_to_device(camera, double(height), double(width));
+      for (int i=0; i < list.numTriangles; ++i)
+        algorithms::RasterizeGoingUpTriangle(transforms::transform_triangle(transform, list.triangles[i]), image);
 
-    io::Image2PNM(x, "proj1D_out.pnm");
+      io::Image2PNM(image, gen_filename(f));
+    }
 
     return 0;
 }

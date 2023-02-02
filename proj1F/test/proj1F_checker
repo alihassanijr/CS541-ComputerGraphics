@@ -1,0 +1,66 @@
+#!/bin/ksh
+
+if [[ ! -f proj1F_soln.pnm ]] ; then
+   echo "You must download the proj1F_soln.pnm file and place it in this directory."
+   echo "Giving up"
+   exit 1
+fi
+
+if [[ ! -f counter.c ]] ; then
+   echo "You need counter.c"
+   echo "Giving up"
+   exit 1
+fi
+   
+rm -f counter
+gcc -o counter counter.c
+
+if [[ ! -f counter ]] ; then
+   echo "Unable to compiler counter program"
+   echo "Giving up"
+   exit 1
+fi
+   
+if [[ -f proj1F.c ]] ; then
+    echo "Working with C file proj1F.c"
+    gcc proj1F.c -lm
+    if [[ $? != 0 ]] ; then
+       echo "Compile failed, giving up."
+       exit 1
+    fi
+    echo "Successful compile"
+elif [[ -f proj1F.cpp ]] ; then
+    echo "Working with C++ file proj1F.cpp"
+    g++ proj1F.cpp -lm
+    if [[ $? != 0 ]] ; then
+       echo "Compile failed, giving up."
+       exit 1
+    fi
+    echo "Successful compile"
+fi
+
+rm -f proj1F_frame????.pnm
+./a.out
+if [[ ! -f proj1F_frame0000.pnm ]] ; then
+    echo "Compiled program and ran it, but a.out did not produce proj1F_frame0000.pnm"
+    echo "Giving up"
+    exit 1
+fi
+X=$(ls proj1F_frame????.pnm | wc -l)
+if (( $X != 1 )) ; then
+    echo "You are producing too many images.  You should only produce proj1F_frame0000.pnm"
+    exit 1
+fi
+
+./counter proj1F_frame0000.pnm proj1F_soln.pnm
+if [[ $? != 0 ]] ; then
+       echo "Counter program believes there are more than 200 pixels of difference"
+       exit 1
+fi
+
+echo "Looks like success -- compiled, ran, and compared with the reference solutions and they match.  (CONGRATS)"
+echo "If you haven't made a movie yet, then save a copy of your code for submission."
+echo "Also don't forget to put your movie link at the top of your C file"
+
+exit 0
+   

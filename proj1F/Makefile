@@ -1,6 +1,10 @@
+SHELL := /bin/bash
+
 .PHONY: clean build run convert test
 
 all: clean build run convert test
+
+video: clean build-video run convert-video generate-video
 
 clean:
 	@echo "Cleaning up"
@@ -21,14 +25,31 @@ clean:
 	rm -f test/proj1F_frame*.png
 	rm -f test/proj1F_frame*.pnm
 	rm -rf test/counter
+	rm -rf frames/
 
 build:
 	@echo "Compiling"
 	g++ proj1F.cpp -o proj1F
 
+build-video:
+	@echo "Compiling"
+	mkdir -p frames/
+	g++ proj1F.cpp -DVIDEO -DVERBOSE -o proj1F
+
 run:
 	@echo "Running"
 	./proj1F
+
+convert-video:
+	@echo "Converting frames to PNG"
+	for f in frames/*.pnm ; do \
+		echo "$$f >> $${f/pnm/png}"; \
+		pnmtopng $$f >> $${f/pnm/png}; \
+	done
+
+generate-video:
+	@echo "Converting to video using FFMPEG"
+	ffmpeg -r 25 -f image2 -s 1000x1000 -i frames/proj1F_frame%04d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p proj1F.mp4
 
 convert:
 	@echo "Converting output to PNG"

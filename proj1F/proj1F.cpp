@@ -4,6 +4,8 @@ Ali Hassani
 
 Project 1-F
 
+Video URL: https://ix.cs.uoregon.edu/~alih/proj1F.mp4
+
 CS 441/541
 
 */
@@ -1430,7 +1432,11 @@ views::Camera GetCamera(int frame, int nframes) {
 
 string gen_filename(int f) {
   char str[256];
+  #ifdef VIDEO
+  sprintf(str, "frames/proj1F_frame%04d.pnm", f);
+  #else
   sprintf(str, "proj1F_frame%04d.pnm", f);
+  #endif
   return str;
 }
 
@@ -1447,12 +1453,19 @@ int main() {
     Image image = Image(width, height);
     TriangleList list = skel::Get3DTriangles();
 
-    int f = 0;
-    //for (int f=0; f < 1000; ++f) {
-    //  if (f % 250 != 0)
-    //    continue;
+    #ifdef VIDEO
+    for (int f=0; f < 1000; ++f) {
+      #ifdef VERBOSE
+      cout << "Generating frame " << f << endl;
+      #endif
+      //if (f % 250 != 0)
+      //  continue;
 
-    //  image.zfill();
+      image.zfill();
+    #else
+    int f = 0;
+    #endif
+
     Camera camera = skel::GetCamera(f, 1000);
     lighting::LightingParameters lp = lighting::GetLighting(camera);
     Transform transform = transforms::world_to_device(camera, double(height), double(width));
@@ -1464,7 +1477,9 @@ int main() {
     }
 
     io::Image2PNM(image, gen_filename(f));
-    //}
+    #ifdef VIDEO
+    }
+    #endif
 
     return 0;
 }

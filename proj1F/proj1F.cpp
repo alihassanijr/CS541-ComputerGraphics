@@ -295,6 +295,11 @@ Matrix<T, M_, N_> matmul(Matrix<T, M_, K_> a, Matrix<T, K_, N_> b) {
 }
 
 template <typename T>
+T dot_prod(Vector<T, 3> a, Vector<T, 3> b) {
+  return (a * b).sum();
+}
+
+template <typename T>
 Vector<T, 3> cross_prod(Vector<T, 3> a, Vector<T, 3> b) {
   Vector<T, 3> c;
   c.set(0, a.get(1) * b.get(2) - a.get(2) * b.get(1));
@@ -476,6 +481,7 @@ struct Triangle {
   double         Z[3];
   double         color[3][3];
   double         normals[3][3];
+  double         shading[3];
 
   bool sorted = false; /* Checks if it's already been sorted (assume Triangle coordinates do not change while rasterizing) */
   int* sorted_X_top; /* Left and right vertices in the top half of the triangle */
@@ -492,53 +498,52 @@ struct Triangle {
     }
   }
 
-  Vertex top() {
-    return Vertex(X[sorted_Y[2]], Y[sorted_Y[2]], Z[sorted_Y[2]]);
+  // Normals are already precomputed and loaded from file.
+  //void compute_normals() {
+  //  for (int i=0; i < 3; ++i) {
+  //    linalg::Vector<double 3> A(X[0], Y[0], Z[0]);
+  //    linalg::Vector<double 3> B(X[1], Y[1], Z[1]);
+  //    linalg::Vector<double 3> C(X[2], Y[2], Z[2]);
+
+  //    linalg::Vector<double 3> N = linalg::cross_prod((C - A), (B - A));
+  //    for (int j=0; j < 3; ++j) {
+  //      normals[i][j] = N.get(j);
+  //    }
+  //}
+
+  int top() {
+    return sorted_Y[2];
   }                                             
-  Vertex middle() {                             
-    return Vertex(X[sorted_Y[1]], Y[sorted_Y[1]], Z[sorted_Y[1]]);
+  int middle() {                             
+    return sorted_Y[1];
   }                                             
-  Vertex bottom() {                             
-    return Vertex(X[sorted_Y[0]], Y[sorted_Y[0]], Z[sorted_Y[0]]);
+  int bottom() {                             
+    return sorted_Y[0];
   }
 
-  Vertex top_left() {
-    return Vertex(X[sorted_X_top[0]], Y[sorted_X_top[0]], Z[sorted_X_top[0]]);
+  int top_left() {
+    return sorted_X_top[0];
   }                                                     
-  Vertex top_right() {                                  
-    return Vertex(X[sorted_X_top[1]], Y[sorted_X_top[1]], Z[sorted_X_top[1]]);
+  int top_right() {                                  
+    return sorted_X_top[1];
   }
 
-  Vertex bottom_left() {
-    return Vertex(X[sorted_X_bottom[0]], Y[sorted_X_bottom[0]], Z[sorted_X_bottom[0]]);
+  int bottom_left() {
+    return sorted_X_bottom[0];
   }                                                           
-  Vertex bottom_right() {                                     
-    return Vertex(X[sorted_X_bottom[1]], Y[sorted_X_bottom[1]], Z[sorted_X_bottom[1]]);
+  int bottom_right() {                                     
+    return sorted_X_bottom[1];
   }
 
-  Color top_color() {
-    return Color(color[sorted_Y[2]]);
+  Vertex getVertex(int index) {
+    return Vertex(X[index], Y[index], Z[index]);
+  }                                             
+  Color getColor(int index) {
+    return Color(color[index]);
   }                            
-  Color middle_color() {             
-    return Color(color[sorted_Y[1]]);
+  double getShading(int index) {
+    return shading[index];
   }                            
-  Color bottom_color() {             
-    return Color(color[sorted_Y[0]]);
-  }
-
-  Color top_left_color() {
-    return Color(color[sorted_X_top[0]]);
-  }                                
-  Color top_right_color() {              
-    return Color(color[sorted_X_top[1]]);
-  }
-
-  Color bottom_left_color() {
-    return Color(color[sorted_X_bottom[0]]);
-  }                                   
-  Color bottom_right_color() {              
-    return Color(color[sorted_X_bottom[1]]);
-  }
 };
 
 struct TriangleList {
@@ -752,7 +757,7 @@ Line intercept(triangles::Vertex a, triangles::Vertex b) {
 namespace image {
 
 unsigned char pixeldouble2char(double c) {
-  return math::C441(c * 255);
+  return math::C441(c * 255.0d);
 }
 
 /// Pixel
@@ -994,7 +999,8 @@ Transform world_to_camera(views::Camera camera) {
   linalg::Vector u_ = linalg::cross_prod<double>(camera.up.vec, w_);
   u_ = (u_) / (u_.norm());
   linalg::Vector v_ = linalg::cross_prod<double>(w_, u_);
-  v_ = (v_) / (v_.norm());
+  // We shouldn't need this. The cross product of two unit vectors is be a unit vector.
+  //v_ = (v_) / (v_.norm());
   linalg::Vector t_ = (geometry::Coord3D(0.0d, 0.0d, 0.0d) - camera.position).vec;
 
   geometry::Coord3D w = geometry::Coord3D(w_);
@@ -1092,6 +1098,37 @@ LightingParameters GetLighting(views::Camera c) {
   return lp;
 }
 
+double CalculateShading(
+    LightingParameters lp, 
+    linalg::Vector<double, 3> viewDirection,
+    linalg::Vector<double, 3> normal) {
+  double LN = linalg::dot_prod(lp.lightDir, normal);
+  double diffuse = max(0.0d, LN); // view direction does not affect this
+
+  linalg::Vector<double, 3> R = (normal * (2*LN)) - lp.lightDir;
+  double RV = max(0.0d, linalg::dot_prod(R, viewDirection));
+
+  double specular = pow(RV, lp.alpha); // Didn't need abs because RV is already >= 0
+  return lp.Ka + lp.Kd * diffuse + lp.Ks * specular;
+}
+
+triangles::Triangle ComputeTriangleShading(triangles::Triangle t, LightingParameters lp, views::Camera c) {
+  for (int i = 0; i < 3; ++i) {
+    double v[3];
+    v[0] = t.X[i];
+    v[1] = t.Y[i];
+    v[2] = t.Z[i];
+    linalg::Vector<double, 3> viewDir = c.position.vec - linalg::Vector<double, 3>(v);
+    viewDir = viewDir / viewDir.norm();
+    t.shading[i] = CalculateShading(
+        lp,
+        viewDir, 
+        linalg::Vector<double, 3>(t.normals[i])
+        );
+  }
+  return t;
+}
+
 
 } // namespace lighting
 
@@ -1104,12 +1141,21 @@ void fillTriangle(
     image::Image image, 
     double rowMin, 
     double rowMax, 
-    triangles::Vertex anchor, 
-    triangles::Vertex left, 
-    triangles::Vertex right, 
-    triangles::Color anchorColor, 
-    triangles::Color leftColor, 
-    triangles::Color rightColor) {
+    int anchorIdx, 
+    int leftIdx, 
+    int rightIdx) {
+  /* Get vertices, colors, and shading values corresponding to anchor, left and right */
+  triangles::Vertex anchor = t.getVertex(anchorIdx);
+  triangles::Vertex   left = t.getVertex(leftIdx);
+  triangles::Vertex  right = t.getVertex(rightIdx);
+  triangles::Color anchorColor = t.getColor(anchorIdx);
+  triangles::Color   leftColor = t.getColor(leftIdx);
+  triangles::Color  rightColor = t.getColor(rightIdx);
+  double anchorShading = t.getShading(anchorIdx);
+  double   leftShading = t.getShading(leftIdx);
+  double  rightShading = t.getShading(rightIdx);
+
+  /* Scanline */
   geometry::Line leftEdge  = geometry::intercept( left, anchor);
   geometry::Line rightEdge = geometry::intercept(right, anchor);
   if (leftEdge.valid() && rightEdge.valid()) {
@@ -1140,9 +1186,22 @@ void fillTriangle(
           rightColor, 
           anchorColor, 
           geometry::Coord2D(rightEnd, r));
+      double leftShadingX = math::lerp<geometry::Coord2D, double>(
+          geometry::Coord2D(left), 
+          geometry::Coord2D(anchor), 
+          leftShading, 
+          anchorShading, 
+          geometry::Coord2D(leftEnd, r));
+      double rightShadingX = math::lerp<geometry::Coord2D, double>(
+          geometry::Coord2D(right), 
+          geometry::Coord2D(anchor), 
+           rightShading, 
+          anchorShading, 
+          geometry::Coord2D(rightEnd, r));
       if (leftEnd >= rightEnd) {
         math::swap<double>(&leftZ, &rightZ);
         math::swap<triangles::Color>(&leftColorX, &rightColorX);
+        math::swap<double>(&leftShadingX, &rightShadingX);
         math::swap<double>(&leftEnd, &rightEnd);
       }
       for (int c = math::C441(leftEnd); c <= math::F441(rightEnd); ++c) {
@@ -1158,34 +1217,38 @@ void fillTriangle(
             leftColorX, 
             rightColorX, 
             c);
-        image.set_pixel(r, c, z, image::Pixel(color.colors[0], color.colors[1], color.colors[2]));
+        double shading = math::lerp<double, double>(
+             leftEnd, 
+            rightEnd, 
+            leftShadingX, 
+            rightShadingX, 
+            c);
+        image.set_pixel(r, c, z, image::Pixel(
+              min(max(0.0d, color.colors[0] * shading), 1.0d), 
+              min(max(0.0d, color.colors[1] * shading), 1.0d), 
+              min(max(0.0d, color.colors[2] * shading), 1.0d)
+              ));
       }
     }
   }
 }
 
 void fillBottomTriangle(triangles::Triangle t, image::Image image) {
-  double rowMinD = t.bottom().y();
-  double rowMaxD = t.middle().y();
-  triangles::Vertex anchor = t.bottom();
-  triangles::Vertex   left = t.bottom_left();
-  triangles::Vertex  right = t.bottom_right();
-  triangles::Color anchorColor =       t.bottom_color();
-  triangles::Color   leftColor =  t.bottom_left_color();
-  triangles::Color  rightColor = t.bottom_right_color();
-  fillTriangle(t, image, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
+  double rowMinD = t.getVertex(t.bottom()).y();
+  double rowMaxD = t.getVertex(t.middle()).y();
+  int anchor = t.bottom();
+  int   left = t.bottom_left();
+  int  right = t.bottom_right();
+  fillTriangle(t, image, rowMinD, rowMaxD, anchor, left, right);
 }
 
 void fillTopTriangle(triangles::Triangle &t, image::Image image) {
-  double rowMinD = t.middle().y();
-  double rowMaxD = t.top().y();
-  triangles::Vertex anchor = t.top();
-  triangles::Vertex   left = t.top_left();
-  triangles::Vertex  right = t.top_right();
-  triangles::Color anchorColor =       t.top_color();
-  triangles::Color   leftColor =  t.top_left_color();
-  triangles::Color  rightColor = t.top_right_color();
-  fillTriangle(t, image, rowMinD, rowMaxD, anchor, left, right, anchorColor, leftColor, rightColor);
+  double rowMinD = t.getVertex(t.middle()).y();
+  double rowMaxD = t.getVertex(t.top()).y();
+  int anchor = t.top();
+  int   left = t.top_left();
+  int  right = t.top_right();
+  fillTriangle(t, image, rowMinD, rowMaxD, anchor, left, right);
 }
 
 void RasterizeGoingUpTriangle(triangles::Triangle t, image::Image image) {
@@ -1391,9 +1454,14 @@ int main() {
 
     //  image.zfill();
     Camera camera = skel::GetCamera(f, 1000);
+    lighting::LightingParameters lp = lighting::GetLighting(camera);
     Transform transform = transforms::world_to_device(camera, double(height), double(width));
-    for (int i=0; i < list.numTriangles; ++i)
-      algorithms::RasterizeGoingUpTriangle(transforms::transform_triangle(transform, list.triangles[i]), image);
+    for (int i=0; i < list.numTriangles; ++i) {
+      triangles::Triangle triangle = list.triangles[i];
+      triangle = lighting::ComputeTriangleShading(triangle, lp, camera);
+      triangle = transforms::transform_triangle(transform, triangle);
+      algorithms::RasterizeGoingUpTriangle(triangle, image);
+    }
 
     io::Image2PNM(image, gen_filename(f));
     //}

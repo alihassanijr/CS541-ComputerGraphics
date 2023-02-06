@@ -59,6 +59,7 @@ For more info read `Makefile`.
 <img src="../assets/outputs/proj1F.png" width="500" />
 
 [Link to video](https://ix.cs.uoregon.edu/~alih/proj1F.mp4)
+[Link to video 2](https://ix.cs.uoregon.edu/~alih/proj1F_custom.mp4)
 
 ## Credits
 CS 441/541 (Winter 2023) was instructed by [Prof. Hank Childs](https://cdux.cs.uoregon.edu/childs.html).

@@ -5,6 +5,7 @@ Ali Hassani
 Project 1-F
 
 Video URL: https://ix.cs.uoregon.edu/~alih/proj1F.mp4
+Custom Video URL: https://ix.cs.uoregon.edu/~alih/proj1F_custom.mp4
 
 CS 441/541
 
@@ -560,64 +561,44 @@ struct TriangleList {
 namespace geometry {
 
 struct Coord2D {
-  double* X;
-  double* Y;
+  linalg::Vector<double, 2> vec;
 
   Coord2D(double x, double y) {
-    X = new double[1];
-    Y = new double[1];
-    X[0] = x;
-    Y[0] = y;
-  }
-
-  Coord2D(double &x, double &y) {
-    X = &x;
-    Y = &y;
+    vec.data[0] = x;
+    vec.data[1] = y;
   }
 
   Coord2D(double *x, double *y) {
-    X = x;
-    Y = y;
+    vec.data[0] = x[0];
+    vec.data[1] = y[0];
   }
 
   Coord2D(triangles::Vertex v) {
-    X = v.X;
-    Y = v.Y;
+    vec.data[0] = v.X[0];
+    vec.data[1] = v.Y[0];
   }
 
   double x() const {
-    return X[0];
+    return vec.data[0];
   }
   double y() const {
-    return Y[0];
+    return vec.data[1];
   }
 
   Coord2D operator*(const Coord2D &b) {
-    Coord2D c(new double[1], new double[1]);
-    c.X[0] = this->x() * b.x();
-    c.Y[0] = this->y() * b.y();
-    return c;
+    return Coord2D(this->x() * b.x(), this->y() * b.y());
   }
 
   Coord2D operator/(const Coord2D &b) {
-    Coord2D c(new double[1], new double[1]);
-    c.X[0] = this->x() / b.x();
-    c.Y[0] = this->y() / b.y();
-    return c;
+    return Coord2D(this->x() / b.x(), this->y() / b.y());
   }
 
   Coord2D operator+(const Coord2D &b) {
-    Coord2D c(new double[1], new double[1]);
-    c.X[0] = this->x() + b.x();
-    c.Y[0] = this->y() + b.y();
-    return c;
+    return Coord2D(this->x() + b.x(), this->y() + b.y());
   }
 
   Coord2D operator-(const Coord2D &b) {
-    Coord2D c(new double[1], new double[1]);
-    c.X[0] = this->x() - b.x();
-    c.Y[0] = this->y() - b.y();
-    return c;
+    return Coord2D(this->x() - b.x(), this->y() - b.y());
   }
 
   operator double() const {
@@ -631,8 +612,8 @@ struct Coord2D {
 
   operator linalg::Vector<double, 2>() const {
     linalg::Vector<double, 2> v;
-    v.set(0, X[0]);
-    v.set(1, Y[0]);
+    v.set(0, vec.data[0]);
+    v.set(1, vec.data[1]);
     return v;
   }
 };
@@ -1455,7 +1436,7 @@ int main() {
     int height = 1000;
     int width  = 1000;
     #ifdef CUSTOM
-    int n_frames = 700;
+    int n_frames = 1500;
     #else
     int n_frames = 1000;
     #endif

@@ -26,6 +26,7 @@ clean:
 	rm -f test/proj1F_frame*.pnm
 	rm -rf test/counter
 	rm -rf frames/
+	rm -rf proj1F.mp4
 
 build:
 	@echo "Compiling"
@@ -34,7 +35,7 @@ build:
 build-video:
 	@echo "Compiling"
 	mkdir -p frames/
-	g++ proj1F.cpp -DVIDEO -DVERBOSE -o proj1F
+	g++ proj1F.cpp -DVIDEO -DVERBOSE -DCUSTOM -o proj1F
 
 run:
 	@echo "Running"

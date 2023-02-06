@@ -1415,7 +1415,11 @@ views::Camera GetCamera(int frame, int nframes) {
     using Coord = typename geometry::Coord3D;
     using Camera = typename views::Camera;
     double t = SineParameterize(frame, nframes, nframes/10);
+    #ifdef CUSTOM
+    Coord position(40.0d*cos(2*M_PI*t), 40.0d*sin(2.5*M_PI*t), 40.0d);
+    #else
     Coord position(40.0d*sin(2*M_PI*t), 40.0d*cos(2*M_PI*t), 40.0d);
+    #endif
     Coord focus(0.0d, 0.0d, 0.0d);
     Coord up(0.0d, 1.0d, 0.0d);
     double near = 5.0d;
@@ -1450,11 +1454,16 @@ using Transform = typename transforms::Transform;
 int main() {
     int height = 1000;
     int width  = 1000;
+    #ifdef CUSTOM
+    int n_frames = 700;
+    #else
+    int n_frames = 1000;
+    #endif
     Image image = Image(width, height);
     TriangleList list = skel::Get3DTriangles();
 
     #ifdef VIDEO
-    for (int f=0; f < 1000; ++f) {
+    for (int f=0; f < n_frames; ++f) {
       #ifdef VERBOSE
       cout << "Generating frame " << f << endl;
       #endif
@@ -1466,7 +1475,7 @@ int main() {
     int f = 0;
     #endif
 
-    Camera camera = skel::GetCamera(f, 1000);
+    Camera camera = skel::GetCamera(f, n_frames);
     lighting::LightingParameters lp = lighting::GetLighting(camera);
     Transform transform = transforms::world_to_device(camera, double(height), double(width));
     for (int i=0; i < list.numTriangles; ++i) {

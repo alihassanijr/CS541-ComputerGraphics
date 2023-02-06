@@ -35,7 +35,7 @@ It was previously set up with VTK, but that became a challenge over time so now 
 
 <img src="assets/outputs/proj1F.png" width="300" />
 
-[Link to video](http://ix.cs.uroregon.edu/~alih/proj1F.mp4)
+[Link to video](https://ix.cs.uoregon.edu/~alih/proj1F.mp4)
 
 ## Credits
 CS 441/541 (Winter 2023) was instructed by [Prof. Hank Childs](https://cdux.cs.uoregon.edu/childs.html).

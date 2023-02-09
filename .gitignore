@@ -2,3 +2,6 @@
 *.png
 *.pnm
 *.swp
+build/
+local/
+tmp/

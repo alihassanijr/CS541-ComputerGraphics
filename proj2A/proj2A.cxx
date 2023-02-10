@@ -1,3 +1,17 @@
+/*
+
+Ali Hassani
+
+Project 2-A
+
+CS 441/541
+
+*/
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <assert.h>
+
 #include <GL/glew.h>    // include GLEW and new version of GL on Windows
 #include <GLFW/glfw3.h> // GLFW helper library
 #include <stdio.h>
@@ -10,9 +24,13 @@
 
 #include "proj2A_data.h"
 
-//#define PHASE3
-//#define PHASE4
-//#define PHASE5
+using namespace std;
+
+#define PHASE3
+#define PHASE4
+#define PHASE5
+
+#define NUM_INDICES 44106
 
 void _print_shader_info_log(GLuint shader_index) {
   int max_len = 2048;
@@ -69,6 +87,55 @@ GLuint SetupPhase2DataForRendering()
   return vao;
 }
 
+GLuint SetupPhase345DataForRendering()
+{
+  printf("Getting data for Phase 3\n");
+
+  // tri_points
+  // tri_normals
+  // tri_data
+  // tri_indices
+
+  // Add data to VBOs and VAO for phase 3 here
+
+  GLuint points_vbo = 0;
+  glGenBuffers(1, &points_vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+  glBufferData(GL_ARRAY_BUFFER, 77535 * sizeof(float), tri_points, GL_STATIC_DRAW);
+
+  GLuint data_vbo = 0;
+  glGenBuffers(1, &data_vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, data_vbo);
+  glBufferData(GL_ARRAY_BUFFER, 25845 * sizeof(float), tri_data, GL_STATIC_DRAW);
+
+  GLuint normals_vbo = 0;
+  glGenBuffers(1, &normals_vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, normals_vbo);
+  glBufferData(GL_ARRAY_BUFFER, 77535 * sizeof(float), tri_normals, GL_STATIC_DRAW);
+
+  GLuint index_vbo;    // Index buffer object
+  glGenBuffers( 1, &index_vbo);
+  glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, index_vbo);
+  glBufferData( GL_ELEMENT_ARRAY_BUFFER, 44106 * sizeof(GLuint), tri_indices, GL_STATIC_DRAW );
+
+  GLuint vao = 0;
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+  glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+  glBindBuffer(GL_ARRAY_BUFFER, data_vbo);
+  glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, NULL);
+  glBindBuffer(GL_ARRAY_BUFFER, normals_vbo);
+  glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+  glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, index_vbo );
+
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+  glEnableVertexAttribArray(2);
+
+  return vao;
+}
+
 const char *phase2VertexShader =
   "#version 400\n"
   "layout (location = 0) in vec3 vertex_position;\n"
@@ -86,17 +153,6 @@ const char *phase2FragmentShader =
   "void main() {\n"
   "  frag_color = vec4(color, 1.0);\n"
   "}\n";
-
-
-GLuint SetupPhase345DataForRendering()
-{
-  printf("Getting data for Phase 3\n");
-
-  // Add data to VBOs and VAO for phase 3 here
-
-  GLuint vao = 0;
-  return vao;
-}
 
 const char *phase345VertexShader =
   "#version 400\n"
@@ -119,6 +175,19 @@ const char *phase345VertexShader =
   // camaraloc  : is the location of the camera
   // lightdir   : is the direction of the light
   // lightcoeff : represents a vec4(Ka, Kd, Ks, alpha) from LightingParams of 1F
+  "  float Ka    = lightcoeff.x;\n"
+  "  float Kd    = lightcoeff.y;\n"
+  "  float Ks    = lightcoeff.z;\n"
+  "  float alpha = lightcoeff.w;\n"
+  "  vec3 viewDirection = normalize(cameraloc - vertex_position);\n"
+  "  float LN = dot(normalize(lightdir), normalize(vertex_normal));\n"
+  "  float diffuse = max(0.0, LN);\n" // view direction does not affect this
+
+  "  vec3 R = (normalize(vertex_normal) * (2*LN)) - normalize(lightdir);\n"
+  "  float RV = max(0.0, dot(normalize(R), viewDirection));\n"
+
+  "  float specular = pow(RV, alpha);\n" // Didn't need abs because RV is already >= 0
+  "  shading_amount = Ka + Kd * diffuse + Ks * specular;\n"
 #endif
 
   "}\n";
@@ -132,11 +201,19 @@ const char *phase345FragmentShader =
   "  frag_color = vec4(1.0, 0.0, 0.0, 1.0);\n"
 
 #ifdef PHASE4
+  "  vec3 c1 = mix(vec3(0.25, 0.25,  1.0), vec3( 1.0,  1.0,  1.0), (data - 1.0) / (3.5)) * float(data >= 1.0 && data <= 4.5);\n"
+  "  vec3 c2 = mix(vec3( 1.0,  1.0,  1.0), vec3( 1.0, 0.25, 0.25), (data - 4.5) / (1.5)) * float(data >= 4.5 && data <= 6.0);\n"
+  "  frag_color = vec4(c1 + c2, 1.0);\n"
   // Update frag_color by color based on data
 #endif
 
 #ifdef PHASE5
   // Update frag_color by mixing the shading factor
+  "  frag_color = vec4((c1 + c2) * shading_amount, 1.0);\n"
+  //"  float r = max(0.0, min(1.0, frag_color.x * shading_amount));\n"
+  //"  float g = max(0.0, min(1.0, frag_color.y * shading_amount));\n"
+  //"  float b = max(0.0, min(1.0, frag_color.z * shading_amount));\n"
+  //"  frag_color = vec4(r, g, b, 1.0);\n"
 #endif
 
   "}\n";
@@ -264,7 +341,7 @@ int main() {
     glDrawElements( GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL );
 #else
     // Add correct number of indices
-    glDrawElements( GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL );
+    glDrawElements( GL_TRIANGLES, NUM_INDICES, GL_UNSIGNED_INT, NULL );
 #endif
 
     // update other events like input handling

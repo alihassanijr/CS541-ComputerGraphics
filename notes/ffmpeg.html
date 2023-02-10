@@ -1,0 +1,84 @@
+<p>Hi all,</p>
+<p>I just thought I'd share what I did to generate the video file, because it was pretty straightforward, didn't require much time and effort, and you can get it done on <code>ix-dev</code>, and you don't need to install anything system-wide.</p>
+<h3><strong>1. Setting up FFMPEG</strong></h3>
+<p>You can <a class="inline_disabled" href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">install ffmpeg using your package manager</a> if you're developing locally. If you're working off of <code>ix-dev</code> like me, you can just set up the <a class="inline_disabled" href="https://johnvansickle.com/ffmpeg/" target="_blank" rel="noopener noreferrer">static build</a>.</p>
+<p><code>ix-dev</code> is amd (you can run <code>lscpu</code> and find out what your cpu architecture is), so we'll download the amd64 static build.</p>
+<p>Run these lines to download, extract, and symlink ffmpeg to your local bin directory (most shells add that to your path by default)</p>
+<pre>cd ~/
+wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+tar -xf ffmpeg-release-amd64-static.tar.xz &amp;&amp; mv ffmpeg-5.1.1-amd64-static ffmpeg-5.1 &amp;&amp; rm ffmpeg-release-amd64-static.tar.xz
+cd ~/
+mkdir -p .local/bin
+ln -s $(pwd)/ffmpeg-5.1/ffmpeg $(pwd)/.local/bin/ffmpeg
+</pre>
+<p>This just downloads and extracts ffmpeg 5.1.1 to your home directory, ensures <code>~/.local/bin</code> exists, and links ffmpeg to ffmpeg in that directory.</p>
+<p>Once you do this, running:</p>
+<pre>which ffmpeg</pre>
+<p>should print out the path your ffmpeg in your <code>.local/bin</code>.</p>
+<h4><strong>1.1. If it doesn't work</strong></h4>
+<p>If it doesn't, add this to your <code>~/.bashrc</code> file (if you're using bash):</p>
+<pre>export PATH=~/.local/bin:$PATH</pre>
+<p>If you end up doing this, note that you need to terminate your current bash session and start a new one (log out and ssh back into <code>ix-dev</code>.)</p>
+<h4><strong>1.2. Confirm it's working</strong></h4>
+<pre>ffmpeg -h</pre>
+<h3><strong>2. Tips on compiling, testing and generating videos</strong></h3>
+<p>I'm in the habit of setting up Makefiles for these types of scenarios.</p>
+<p>My original one has the following targets: <code>clean</code>, <code>compile</code>, <code>run</code>, <code>convert</code>, <code>test</code>.</p>
+<p><code>clean</code> removes all my compiled binaries, and images/pnm files that were generated, if any.</p>
+<p><code>compile</code> just compiles my code.</p>
+<p><code>run</code> runs the project, and <code>convert</code> calls the PNM to PNG converter and gives me my PNG.</p>
+<p><code>test</code> calls the checker script and verifies my solution.</p>
+<p>That way, every time I want to test, I just type in <code>make</code> and don't worry about anything else.</p>
+<p>This is specifically useful in this project, because all I did was customize the same make targets for video, meaning there's a video argument / macro that gets set when I use those targets, and my <code>convert-video</code> looks in a directory that my code dumps all the frames, because it's 1000 files, loops through those 1000 files and converts them into PNG, and then finally calls FFMPEG.</p>
+<p>Because I'm unsure to what I extent I can share what I did, I'll just share my FFMPEG command:</p>
+<pre>ffmpeg -r 25 -f image2 -s 1000x1000 -i frames/proj1F_frame%04d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p proj1F.mp4</pre>
+<p>This generates a video file <code>proj1F.mp4</code> given png files in the <code>frames/</code> directory whose filenames match the pattern <code>proj1F_frameXXXX.png</code>.</p>
+<p>The <code>-r</code> argument sets the frame rate to 25 fps, and we're just using <code>libx264</code> codec,
+  and <code>-s</code> sets our resolution. <code>-crf</code> sets video quality, and <code>-pix_fmt</code> sets the 
+  pixel format, and we're using <code>yuv420p</code> because that represents H.264 as far as I know.
+  Almost all of that command came from literally the first Google result for <q>convert png to mp4 using ffmpeg</q>:
+  <a href="https://hamelot.io/visualization/using-ffmpeg-to-convert-a-set-of-images-into-a-video/">
+Using ffmpeg to convert a set of images into a video
+</a>.
+</p>
+<h3>3. My Makefile</h3>
+<p>Here's a few of my make targets that might just make things easier.</p>
+<p><code>make build-video</code> compiles my CPP code with my video macros (because I'm too lazy to argparse.)
+Nothing special about those, <code>-DVIDEO</code> enables the for loop instead of the single frame,
+<code>-DVERBOSE</code> prints out a line per frame so I can keep track of how many it's generated,
+<code>-DCUSTOM</code> sets my slightly customized <code>GetCamera</code> parameters.</p>
+<p></p>
+<p><code>make convert-video</code> converts all your PNM files under <code>frames/</code>
+to PNGs with the same name (requires <code>pnmtopng</code>.</p>
+<p></p>
+<p><code>make generate-video</code> takes those PNGs and outputs a single video.</p>
+<p></p>
+<p>The <code>all</code> target just sets the targets that are called when we simply do <code>make</code>.
+<p>But to generate video instead of the single frame, I have to run <code>make video</code>.
+<p></p>
+<pre>
+
+all: clean build run convert test
+
+video: clean build-video run convert-video generate-video
+
+build-video:
+	@echo "Compiling"
+	mkdir -p frames/
+	g++ proj1F.cpp -DVIDEO -DVERBOSE -DCUSTOM -o proj1F
+
+run:
+	@echo "Running"
+	./proj1F
+
+convert-video:
+	@echo "Converting frames to PNG"
+	for f in frames/*.pnm ; do \
+		echo "$$f >> $${f/pnm/png}"; \
+		pnmtopng $$f >> $${f/pnm/png}; \
+	done
+
+generate-video:
+	@echo "Converting to video using FFMPEG"
+	ffmpeg -r 25 -f image2 -s 1000x1000 -i frames/proj1F_frame%04d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p proj1F.mp4
+</pre>

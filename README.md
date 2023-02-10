@@ -37,6 +37,13 @@ It was previously set up with VTK, but that became a challenge over time so now 
 
 [Link to video](https://ix.cs.uoregon.edu/~alih/proj1F.mp4)
 
+## Project 2
+Start using OpenGL.
+
+**Project 2-A:** Re-implement 1-F using OpenGL.
+
+<img src="assets/outputs/proj2A.png" width="300" />
+
 ## Credits
 CS 441/541 (Winter 2023) was instructed by [Prof. Hank Childs](https://cdux.cs.uoregon.edu/childs.html).
 So far one of my favorite courses in grad school!

@@ -352,6 +352,9 @@ class RenderManager
    GLuint colorloc;
    GLuint camloc;
    GLuint ldirloc;
+   GLuint ldirloc2;
+   GLuint ldirloc3;
+   GLuint ldirloc4;
    glm::mat4 projection;
    glm::mat4 view;
    GLuint shaderProgram;
@@ -374,6 +377,9 @@ RenderManager::RenderManager()
   colorloc = glGetUniformLocation(shaderProgram, "color");
   camloc = glGetUniformLocation(shaderProgram, "cameraloc");
   ldirloc = glGetUniformLocation(shaderProgram, "lightdir");
+  ldirloc2 = glGetUniformLocation(shaderProgram, "lightdir2");
+  ldirloc3 = glGetUniformLocation(shaderProgram, "lightdir3");
+  ldirloc4 = glGetUniformLocation(shaderProgram, "lightdir4");
 
   glm::vec4 lightcoeff(0.3, 0.7, 2.0, 50.5); // Lighting coeff, Ka, Kd, Ks, alpha
   GLuint lcoeloc = glGetUniformLocation(shaderProgram, "lightcoeff");
@@ -389,10 +395,20 @@ RenderManager::SetView(glm::vec3 &camera, glm::vec3 &origin, glm::vec3 &up)
                        up      // and the head is up
                  );
    view = v; 
+   float lv = 20.0;
    glUniform3fv(camloc, 1, &camera[0]);
    // Direction of light
-   glm::vec3 lightdir = glm::normalize(camera - origin);   
+   glm::vec3 lightdir = glm::normalize(camera - glm::vec3(lv, lv, lv));   
    glUniform3fv(ldirloc, 1, &lightdir[0]);
+   // Direction of 2nd light
+   glm::vec3 lightdir2 = glm::normalize(camera - glm::vec3(-lv, -lv, -lv));   
+   glUniform3fv(ldirloc2, 1, &lightdir2[0]);
+   // Direction of 3rd light
+   glm::vec3 lightdir3 = glm::normalize(camera - glm::vec3(lv, -lv, lv));   
+   glUniform3fv(ldirloc3, 1, &lightdir3[0]);
+   // Direction of 4th light
+   glm::vec3 lightdir4 = glm::normalize(camera - glm::vec3(-lv, lv, -lv));   
+   glUniform3fv(ldirloc4, 1, &lightdir4[0]);
 };
 
 void
@@ -1063,41 +1079,35 @@ const char *GetVertexShader()
            "uniform mat4 model;\n"
            "uniform vec3 cameraloc;  // Camera position \n"
            "uniform vec3 lightdir;   // Lighting direction \n"
+           "uniform vec3 lightdir2;  // Lighting direction 2 \n"
+           "uniform vec3 lightdir3;  // Lighting direction 3 \n"
+           "uniform vec3 lightdir4;  // Lighting direction 4 \n"
            "uniform vec4 lightcoeff; // Lighting coeff, Ka, Kd, Ks, alpha\n"
            "out float shading_amount;\n"
            "void main() {\n"
            "  gl_Position = MVP*vec4(vertex_position, 1.0);\n"
            // Calculate normal transform to prevent weird cylinder shadings
            "  vec3 normal = normalize(mat3(transpose(inverse(model))) * vertex_normal);\n"
-           //"  vec3 position = normalize(mat3(model) * vertex_position);\n"
-           //"  vec3 normal = normalize(vertex_normal);\n"
            "  vec3 camera = normalize(cameraloc);\n"
            // Phong shading
            "  float Ka    = lightcoeff.x;\n"
            "  float Kd    = lightcoeff.y;\n"
            "  float Ks    = lightcoeff.z;\n"
            "  float alpha = lightcoeff.w;\n"
-           "  vec3 viewDirection = normalize(cameraloc - vertex_position);\n"
-           "  float LN = dot(normalize(lightdir), normal);\n"
-           //"  float diffuse = max(0.0, LN);\n"
-           "  float diffuse = clamp(LN, 0.0, 1.0);\n"
-           // Disable two sided lighting
-           //"  float diffuse = LN;\n" // view direction does not affect this
-           //"  if (LN < 0) {\n"
-           //"    LN = dot(normalize(lightdir), -normal);"
-           //"  }\n"
-
-           "  vec3 R = (normal * (2.0*LN)) - normalize(lightdir);\n"
-           //"  float RV = max(0.0, dot(normalize(R), viewDirection));\n"
-           "  float RV = clamp(dot(normalize(R), viewDirection), 0.0, 1.0);\n"
-           // Disable two sided lighting
-           //"  float RV = dot(normalize(R), viewDirection);\n"
-           //"  if (RV < 0) {\n"
-           //"    RV = dot(-normalize(R), viewDirection);\n"
-           //"  }\n"
-
-           "  float specular = pow(RV, alpha);\n" // Didn't need abs because RV is already >= 0
-           "  shading_amount = Ka + Kd * diffuse + Ks * specular;\n"
+           "  float diffuse = max(dot(normal, lightdir), 0.0);\n"
+           "  float diffuse2 = max(dot(normal, lightdir2), 0.0);\n"
+           "  float diffuse3 = max(dot(normal, lightdir3), 0.0);\n"
+           "  float diffuse4 = max(dot(normal, lightdir4), 0.0);\n"
+           "  vec3 viewDir = normalize(cameraloc - vertex_position);\n"
+           "  vec3 reflectDir = reflect(-lightdir, normal);\n"
+           "  vec3 reflectDir2 = reflect(-lightdir2, normal);\n"
+           "  vec3 reflectDir3 = reflect(-lightdir3, normal);\n"
+           "  vec3 reflectDir4 = reflect(-lightdir4, normal);\n"
+           "  float specular = pow(max(dot(viewDir, reflectDir), 0.0), alpha);\n"
+           "  float specular2 = pow(max(dot(viewDir, reflectDir2), 0.0), alpha);\n"
+           "  float specular3 = pow(max(dot(viewDir, reflectDir3), 0.0), alpha);\n"
+           "  float specular4 = pow(max(dot(viewDir, reflectDir4), 0.0), alpha);\n"
+           "  shading_amount = Ka + Kd * max(max(max(diffuse, diffuse2), diffuse3), diffuse4) + Ks * max(max(max(specular, specular2), specular3), specular4);\n"
            "}\n"
          );
    return vertexShader;
@@ -1117,4 +1127,3 @@ const char *GetFragmentShader()
          );
    return fragmentShader;
 }
-

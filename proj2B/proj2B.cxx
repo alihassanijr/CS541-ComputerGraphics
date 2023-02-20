@@ -1069,34 +1069,16 @@ const char *GetVertexShader()
            "  gl_Position = MVP*vec4(vertex_position, 1.0);\n"
            // Calculate normal transform to prevent weird cylinder shadings
            "  vec3 normal = normalize(mat3(transpose(inverse(model))) * vertex_normal);\n"
-           //"  vec3 position = normalize(mat3(model) * vertex_position);\n"
-           //"  vec3 normal = normalize(vertex_normal);\n"
            "  vec3 camera = normalize(cameraloc);\n"
            // Phong shading
            "  float Ka    = lightcoeff.x;\n"
            "  float Kd    = lightcoeff.y;\n"
            "  float Ks    = lightcoeff.z;\n"
            "  float alpha = lightcoeff.w;\n"
-           "  vec3 viewDirection = normalize(cameraloc - vertex_position);\n"
-           "  float LN = dot(normalize(lightdir), normal);\n"
-           //"  float diffuse = max(0.0, LN);\n"
-           "  float diffuse = clamp(LN, 0.0, 1.0);\n"
-           // Disable two sided lighting
-           //"  float diffuse = LN;\n" // view direction does not affect this
-           //"  if (LN < 0) {\n"
-           //"    LN = dot(normalize(lightdir), -normal);"
-           //"  }\n"
-
-           "  vec3 R = (normal * (2.0*LN)) - normalize(lightdir);\n"
-           //"  float RV = max(0.0, dot(normalize(R), viewDirection));\n"
-           "  float RV = clamp(dot(normalize(R), viewDirection), 0.0, 1.0);\n"
-           // Disable two sided lighting
-           //"  float RV = dot(normalize(R), viewDirection);\n"
-           //"  if (RV < 0) {\n"
-           //"    RV = dot(-normalize(R), viewDirection);\n"
-           //"  }\n"
-
-           "  float specular = pow(RV, alpha);\n" // Didn't need abs because RV is already >= 0
+           "  float diffuse = max(dot(normal, lightdir), 0.0);\n"
+           "  vec3 viewDir = normalize(cameraloc - vertex_position);\n"
+           "  vec3 reflectDir = reflect(-lightdir, normal);\n"
+           "  float specular = pow(max(dot(viewDir, reflectDir), 0.0), alpha);\n"
            "  shading_amount = Ka + Kd * diffuse + Ks * specular;\n"
            "}\n"
          );
@@ -1117,4 +1099,3 @@ const char *GetFragmentShader()
          );
    return fragmentShader;
 }
-

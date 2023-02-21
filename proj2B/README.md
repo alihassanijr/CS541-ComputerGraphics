@@ -22,6 +22,23 @@ So this is an earlier version with the shading problem (notice the black dots an
 and here it is without Phong shading:
 <img src="../assets/outputs/proj2B-2.png" width="500" />
 
+And here's what I finally ended up with:
+<img src="../assets/outputs/proj2B-3.png" width="500" />
+
+
+### Half cones instead of cylinders
+After taking a break to attend to research for a few days, I figured I try a different strategy towards `Shape1` and 
+use my half cones instead, simply because it would give me a smoother transition.
+Tried that, and it works! BUT I have to position the camera very carefully, otherwise it'll still look weird.
+
+I guess I'll stop at this point.
+<img src="../assets/outputs/proj2B-4.png" width="500" />
+
+
+## Makefile
+Just the usual, `make` will do everything for you (assuming you're on OSX with the dependencies from [2A](../proj2A/README.md)).
+There's also `make twosided` to get two-sided shading... which doesn't look good.
+
 
 
 ## Credits

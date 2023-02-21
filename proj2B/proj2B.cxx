@@ -8,8 +8,8 @@ CS 441/541
 
 */
 
-#define WIN_HEIGHT 1320
-#define WIN_WIDTH 1320
+#define WIN_HEIGHT 700
+#define WIN_WIDTH  700
 
 #include <iostream>
 #include <stdio.h>
@@ -617,23 +617,21 @@ int main()
   glm::vec3 origin(0, 0, 0);
   glm::vec3 up(0, 1, 0);
 
-  float counter=0;
-  float ct = 0;
+  int counter=0;
   while (!glfwWindowShouldClose(window)) 
   {
     double angle=counter/300.0*2*M_PI;
-    // counter++;
-    ct++;
-    counter = ct;
+    double distance = sin(float(counter)/20.0) * 3 + 10;
+    counter++;
 
-    glm::vec3 camera(10*sin(angle), 0, 10*cos(angle));
+    glm::vec3 camera(distance*sin(angle), -0.5, distance*cos(angle));
     rm.SetView(camera, origin, up);
 
     // wipe the drawing surface clear
     glClearColor(0.3, 0.3, 0.8, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    SetUpDog(rm, ct);
+    SetUpDog(rm, counter);
 
     // update other events like input handling
     glfwPollEvents();
@@ -725,6 +723,35 @@ glm::mat4 Shape1(glm::mat4 modelSoFar, RenderManager &rm,
     glm::mat4 shift = gen_translate(axis, sign * a);
     glm::mat4 rotate = gen_rot(rotate_axis, d);
     glm::mat4 axis_rot = gen_axis_rot(axis);
+    rm.Render(RenderManager::CONE, modelSoFar*rotate*shift*scale*post_transform*axis_rot);
+  }
+  return modelSoFar * gen_rot(rotate_axis, rotate_end) * gen_translate(axis, sign * length);
+}
+
+glm::mat4 Shape2(glm::mat4 modelSoFar, RenderManager &rm, 
+            float scale_start, 
+            float scale_end,
+            float steps, 
+            float length,
+            float rotate_start,
+            float rotate_end,
+            int rotate_axis,
+            int sign,
+            float power = 1.0,
+            int axis = 1,
+            glm::mat4 post_transform = glm::mat4(1.0f)
+            ) {
+  float l = length / steps;
+  for (int i=0; i < int(steps); ++i) {
+    float a = float(i) * l;
+    float m = float(i) / steps;
+    float s = pow(m, power);
+    float sc = scale_start*(1-s) + s*scale_end;
+    float d = rotate_start*(1-m) + m*rotate_end;
+    glm::mat4 scale = gen_scale(axis, sc, l);
+    glm::mat4 shift = gen_translate(axis, sign * a);
+    glm::mat4 rotate = gen_rot(rotate_axis, d);
+    glm::mat4 axis_rot = gen_axis_rot(axis);
     rm.Render(RenderManager::CYLINDER, modelSoFar*rotate*shift*scale*post_transform*axis_rot);
   }
   return modelSoFar * gen_rot(rotate_axis, rotate_end) * gen_translate(axis, sign * length);
@@ -753,7 +780,14 @@ void SetUpBone(glm::mat4 modelSoFar, RenderManager &rm, float t) {
 
 void SetUpHeadBase(glm::mat4 modelSoFar, RenderManager &rm, float t)
 {
-  //glm::mat4 rotate = RotateMatrix(90, 1, 0, 0);
+  // A lot of trickery got this to the point where it doesn't show those black lines anymore
+  // (or if we do two-sided lighting, just overly bright points)
+  //
+  // The reason why we get those in the first place is because we're using disks. And disks are terrible,
+  // because their top and bottom sides are sharp.
+  //
+  // Managed to avoid that in head by setting up half of those cylinders to be "half-cones".
+  // Also had to make the first half cone just a touch bigger to avoid the dark side from the cylinder directly above it.
   rm.SetColor(1, 232.0f/255.0f, 205.0f/255.0f);
   for (int i=0; i < 500; ++i) {
     float s = 0.5 - (pow(float(i) / 500.0, 4) / 2);
@@ -761,11 +795,11 @@ void SetUpHeadBase(glm::mat4 modelSoFar, RenderManager &rm, float t)
     glm::mat4 shift = TranslateMatrix(0, 0.0 + (float(i)/1000.0), -0.45);
     rm.Render(RenderManager::CYLINDER, modelSoFar*shift*scale*gen_axis_rot(1)/* cylinder through Y axis instead of Z */);
   }
-  for (int i=0; i < 250; ++i) {
-    float s = 0.5 - (pow(float(i) / 500.0, 3) / 2);
+  for (int i=0; i < 500; ++i) {
+    float s = 0.501 - (pow(float(i) / 500.0, 4) / 2);
     glm::mat4 scale = ScaleMatrix(s, 0.1, s);
     glm::mat4 shift = TranslateMatrix(0, 0.0 - (float(i)/1000.0), -0.45);
-    rm.Render(RenderManager::CYLINDER, modelSoFar*shift*scale*gen_axis_rot(1)/* cylinder through Y axis instead of Z */);
+    rm.Render(RenderManager::CONE, modelSoFar*shift*scale*gen_axis_rot(1)/* cylinder through Y axis instead of Z */);
   }
 }
 
@@ -924,8 +958,8 @@ glm::mat4 SetUpHead(glm::mat4 modelSoFar, RenderManager &rm, float t)
   SetUpMouth(modelSoFar*translate*mtranslate, rm, t);
 
   glm::mat4 eartranslate = TranslateMatrix(0.0, 0.6, -0.45);
-  SetUpEar(modelSoFar*translate*eartranslate*RotateMatrix(180, 0, 1, 0)*RotateMatrix(30, 0, 0, 1), rm, t);
-  SetUpEar(modelSoFar*translate*eartranslate*RotateMatrix(30, 0, 0, 1), rm, t);
+  SetUpEar(modelSoFar*translate*eartranslate*RotateMatrix(180, 0, 1, 0)*RotateMatrix(30, 0, 0, 1), rm, t*0.98);
+  SetUpEar(modelSoFar*translate*eartranslate*RotateMatrix(30, 0, 0, 1), rm, t*1.01);
   
   glm::mat4 noseTranslate = TranslateMatrix(0, 0.15, -0.01);
   SetUpNose(modelSoFar*translate*noseTranslate, rm, t);
@@ -943,53 +977,20 @@ glm::mat4 SetUpHead(glm::mat4 modelSoFar, RenderManager &rm, float t)
 
 void SetUpRearLeg(glm::mat4 modelSoFar, RenderManager &rm, int sign) {
   rm.SetColor(245.0f/255.0f, 202.0f/255.0f, 175.0f/255.0f);
-  //modelSoFar = Shape1(modelSoFar, rm, 0.1, 0.075, 10.0, 0.1,
-  //      30, 20, 1,
-  //      sign, 1.0,
-  //      0);
   glm::mat4 scale = ScaleMatrix(0.1, 0.1, 0.5);
   glm::mat4 shift = TranslateMatrix(0.0, 0.0, 0.0);
   glm::mat4 rotate = RotateMatrix(180, 0, 1, 0);
-  rm.Render(RenderManager::ShapeType::CONE, modelSoFar*rotate*shift*scale);
-  //modelSoFar = Shape1(modelSoFar, rm, 0.075, 0.05, 20.0, 0.2,
-  //      0, -10, 1,
-  //      1, 1.0,
-  //      2);
-  //modelSoFar = Shape1(modelSoFar, rm, 0.05, 0.05, 10.0, 0.05,
-  //      0, -10, 1,
-  //      1, 1.0,
-  //      2);
-  //modelSoFar = Shape1(modelSoFar, rm, 0.05, 0.075, 100.0, 0.1,
-  //      0, 90, 0,
-  //      1, 1.0,
-  //      2);
+  rm.Render(RenderManager::CONE, modelSoFar*rotate*shift*scale);
 }
 
 void SetUpLeg(glm::mat4 modelSoFar, RenderManager &rm) {
   rm.SetColor(245.0f/255.0f, 202.0f/255.0f, 175.0f/255.0f);
   glm::mat4 scale = ScaleMatrix(0.1, 0.1, 0.5);
   glm::mat4 rotate = RotateMatrix(180, 0, 1, 0);
-  rm.Render(RenderManager::ShapeType::CONE, modelSoFar*rotate*scale);
+  rm.Render(RenderManager::CONE, modelSoFar*rotate*scale);
   glm::mat4 shift = TranslateMatrix(0, 0.0, 0);
   scale = ScaleMatrix(0.175, 0.1, 0.15);
-  rm.Render(RenderManager::ShapeType::SPHERE, modelSoFar*shift*scale);
-  
-  //modelSoFar = Shape1(modelSoFar, rm, 0.1, 0.075, 10.0, 0.1,
-  //      30, 10, 1,
-  //      1, 1.0,
-  //      2);
-  //modelSoFar = Shape1(modelSoFar, rm, 0.075, 0.05, 20.0, 0.2,
-  //      0, 0, 1,
-  //      1, 1.0,
-  //      2);
-  //modelSoFar = Shape1(modelSoFar, rm, 0.05, 0.05, 10.0, 0.05,
-  //      0, -10, 1,
-  //      1, 1.0,
-  //      2);
-  //modelSoFar = Shape1(modelSoFar, rm, 0.05, 0.075, 100.0, 0.1,
-  //      0, 90, 0,
-  //      1, 1.0,
-  //      2);
+  rm.Render(RenderManager::SPHERE, modelSoFar*shift*scale);
 }
 
 void SetUpLegs(glm::mat4 modelSoFar, RenderManager &rm, float bellyfactor) {
@@ -997,45 +998,50 @@ void SetUpLegs(glm::mat4 modelSoFar, RenderManager &rm, float bellyfactor) {
   modelSoFar = modelSoFar * TranslateMatrix(legfactor, legfactor, legfactor / 3);
   modelSoFar = modelSoFar * TranslateMatrix(0, -0.075, 0);
   // Left bottom
-  glm::mat4 shift = TranslateMatrix(-0.45, 0.125, 0.3);
-  glm::mat4 rotate = RotateMatrix(15, 0, 1, 0);
+  glm::mat4 shift = TranslateMatrix(-0.3, 0.15, 0.3);
+  glm::mat4 rotate = RotateMatrix(15, 0, 1, 0) * RotateMatrix(15, 1, 0, 0);
   SetUpLeg(modelSoFar * shift * rotate, rm);
 
   // Right bottom
-  shift = TranslateMatrix(0.5, 0.125, 0.3);
-  rotate = RotateMatrix(-15, 0, 1, 0);
+  shift = TranslateMatrix(0.35, 0.15, 0.3);
+  rotate = RotateMatrix(-15, 0, 1, 0) * RotateMatrix(15, 1, 0, 0);
   SetUpLeg(modelSoFar * shift * rotate, rm);
 
   // Left rear
   shift = TranslateMatrix(-0.4, -0.025, -0.2);
-  rotate = RotateMatrix(10, 0, 1, 0) * RotateMatrix(15, 1, 0, 0);
+  rotate = RotateMatrix(10, 0, 1, 0) * RotateMatrix(20, 1, 0, 0);
   SetUpLeg(modelSoFar * shift * rotate, rm);
 
   // Right rear
   shift = TranslateMatrix(0.45, -0.025, -0.2);
-  rotate = RotateMatrix(-10, 0, 1, 0) * RotateMatrix(15, 1, 0, 0);
+  rotate = RotateMatrix(-10, 0, 1, 0) * RotateMatrix(20, 1, 0, 0);
   SetUpLeg(modelSoFar * shift * rotate, rm);
 }
 
 void SetUpBody(glm::mat4 modelSoFar, RenderManager &rm, float bellyfactor) {
   float maxgirth = 0.8 + bellyfactor;
   float yoffset = bellyfactor / 2;
+  float neckgrowth = - bellyfactor / 4;
   glm::mat4 head_offset = modelSoFar;
-  modelSoFar = modelSoFar * TranslateMatrix(0.0, -0.15+yoffset, -0.45);
+  modelSoFar = modelSoFar * TranslateMatrix(0.0, -0.21+yoffset, -0.45);
   rm.SetColor(1, 232.0f/255.0f, 205.0f/255.0f);
-  modelSoFar = Shape1(modelSoFar, rm, 0.5, 0.55, 500.0, 0.35,
+  glm::mat4 neckscale = ScaleMatrix(0.505+neckgrowth, 0.15, 0.505+neckgrowth);
+  rm.Render(RenderManager::SPHERE, modelSoFar*neckscale);
+  modelSoFar = modelSoFar * TranslateMatrix(0.0, -0.1, 0);
+  neckscale = ScaleMatrix(0.508+neckgrowth, 0.2, 0.508+neckgrowth);
+  rm.Render(RenderManager::SPHERE, modelSoFar*neckscale);
+  modelSoFar = modelSoFar * TranslateMatrix(0.0, -0.01, 0);
+  modelSoFar = Shape1(modelSoFar, rm, 0.495, 0.575, 500.0, 0.3,
         0, 0, 1,
         -1);
-  modelSoFar = Shape1(modelSoFar, rm, 0.55, maxgirth, 500.0, 0.7,
+  modelSoFar = Shape1(modelSoFar, rm, 0.575, maxgirth, 500.0, 0.6,
         0, 0, 1,
-        -1);
-  /* modelSoFar = */ Shape1(modelSoFar, rm, maxgirth, 0.0, 100.0, 0.2,
-        0, 0, 1,
-        -1,
-        3.0);
+        -1, 2.0);
+  glm::mat4 buttscale = ScaleMatrix(maxgirth, 0.15, maxgirth);
+  rm.Render(RenderManager::SPHERE, modelSoFar*buttscale);
 
   // Legs
-  glm::mat4 offset = head_offset * TranslateMatrix(0, -1.25, 0);
+  glm::mat4 offset = head_offset * TranslateMatrix(0, -1.265, 0);
   SetUpLegs(offset, rm, bellyfactor);
 }
 
@@ -1075,10 +1081,18 @@ const char *GetVertexShader()
            "  float Kd    = lightcoeff.y;\n"
            "  float Ks    = lightcoeff.z;\n"
            "  float alpha = lightcoeff.w;\n"
+           #ifdef TWOSIDED
            "  float diffuse = max(dot(normal, lightdir), 0.0);\n"
+           #else
+           "  float diffuse = abs(dot(normal, lightdir));\n"
+           #endif
            "  vec3 viewDir = normalize(cameraloc - vertex_position);\n"
            "  vec3 reflectDir = reflect(-lightdir, normal);\n"
+           #ifdef TWOSIDED
+           "  float specular = pow(abs(dot(viewDir, reflectDir)), alpha);\n"
+           #else
            "  float specular = pow(max(dot(viewDir, reflectDir), 0.0), alpha);\n"
+           #endif
            "  shading_amount = Ka + Kd * diffuse + Ks * specular;\n"
            "}\n"
          );

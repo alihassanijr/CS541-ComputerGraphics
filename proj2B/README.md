@@ -2,6 +2,7 @@
 Make a dog out of spheres and cylinders.
 
 ## Output
+
 <img src="../assets/outputs/proj2B.png" width="500" />
 
 ## Journey
@@ -17,12 +18,15 @@ However, there will be a shading problem when that's used if you look at it from
 frequently.
 
 So this is an earlier version with the shading problem (notice the black dots and lines):
+
 <img src="../assets/outputs/proj2B-1.png" width="500" />
 
 and here it is without Phong shading:
+
 <img src="../assets/outputs/proj2B-2.png" width="500" />
 
 And here's what I finally ended up with:
+
 <img src="../assets/outputs/proj2B-3.png" width="500" />
 
 
@@ -32,6 +36,7 @@ use my half cones instead, simply because it would give me a smoother transition
 Tried that, and it works! BUT I have to position the camera very carefully, otherwise it'll still look weird.
 
 I guess I'll stop at this point.
+
 <img src="../assets/outputs/proj2B-4.png" width="500" />
 
 

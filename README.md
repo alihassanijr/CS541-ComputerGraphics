@@ -44,6 +44,10 @@ Start using OpenGL.
 
 <img src="assets/outputs/proj2A.png" width="300" />
 
+**Project 2-B:** Build a dog with spheres and cylinders.
+
+<img src="assets/outputs/proj2B.png" width="300" />
+
 ## Credits
 CS 441/541 (Winter 2023) was instructed by [Prof. Hank Childs](https://cdux.cs.uoregon.edu/childs.html).
 So far one of my favorite courses in grad school!

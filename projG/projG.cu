@@ -13,30 +13,14 @@ Project G - CUDA
 #define INDEX3(i, j) i * 3 + j
 #define INDEX4(i, j) i * 4 + j
 
+#define SHADER_NUM_THREADS     128
+#define MVP_NUM_THREADS        128
+#define RASTERIZER_NUM_THREADS 128
+
 #include <iostream>
 #include <string>
 #include <assert.h>
-
-/// Value swap
-template <typename T>
-DEVICE
-void swap(T* a, T* b) {
-  T tmp = a[0];
-  a[0] = b[0];
-  b[0] = tmp;
-}
-
-/// CS441 Ceil function.
-DEVICE
-double C441(double f) {
-  return ceil(f-0.00001);
-}
-
-/// CS441 Floor function.
-DEVICE
-double F441(double f) {
-  return floor(f+0.00001);
-}
+#include <limits>
 
 /// CUDA only implements atomicMin and atomicMax for integers.
 /// So we need our own for zbuffer.
@@ -64,6 +48,14 @@ struct AtomicFPOp<double> {
     return __longlong_as_double(old);
   }
 };
+
+inline __device__ double gpuAtomicMax(double * address, double val) {
+  return AtomicFPOp<double>()(address, val,
+                              [](double val, unsigned long long int assumed) {
+                                return __double_as_longlong(max(val, __longlong_as_double(assumed)));
+                              });
+}
+
 
 inline __device__ double gpuAtomicMin(double * address, double val) {
   return AtomicFPOp<double>()(address, val,
@@ -102,6 +94,27 @@ void checkLast(const char* const file, const int line)
         // We don't exit when we encounter CUDA errors in this example.
         // std::exit(EXIT_FAILURE);
     }
+}
+
+/// Value swap
+template <typename T>
+DEVICE
+void swap(T* a, T* b) {
+  T tmp = a[0];
+  a[0] = b[0];
+  b[0] = tmp;
+}
+
+/// CS441 Ceil function.
+DEVICE
+double C441(double f) {
+  return ceil(f-0.00001);
+}
+
+/// CS441 Floor function.
+DEVICE
+double F441(double f) {
+  return floor(f+0.00001);
 }
 
 struct Model {
@@ -458,6 +471,19 @@ void fill(T * data, const T val, const int size) {
 
 template <typename T = double>
 HOST
+T* array_cpu(const int size, T value) {
+  T * mat = (T *)malloc(sizeof(T) * size);
+
+  // Fill 
+  for (int i = 0; i < size; ++i) {
+    mat[i] = value;
+  }
+
+  return mat;
+}
+
+template <typename T = double>
+HOST
 T* zeros_cpu(const int m, const int k) {
   int size = m * k;
   T * mat = (T *)malloc(sizeof(T) * size);
@@ -468,6 +494,21 @@ T* zeros_cpu(const int m, const int k) {
       mat[i * k + j] = 0.0;
     }
   }
+
+  return mat;
+}
+
+template <typename T = double>
+HOST
+T* array_cuda(const int size, T value) {
+  T *mat;
+  cudaMalloc(&mat, sizeof(T) * size);
+
+  // Fill kernel call
+  int max_threads = 128;
+  int blocks = (size + max_threads - 1) / max_threads;
+  fill<T><<<blocks, max_threads>>>(mat, value, size);
+  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
 
   return mat;
 }
@@ -847,7 +888,6 @@ void shader_and_transform(Model *m, Camera c, LightingParameters lp, double heig
 
   cudaMalloc(&m->shading, sizeof(double) * num_vertices);
 
-  #define SHADER_NUM_THREADS 512
   int blocks = (problem_size + SHADER_NUM_THREADS - 1) / SHADER_NUM_THREADS;
   int threads = SHADER_NUM_THREADS;
   phong_shader<<<blocks, threads>>>(
@@ -862,7 +902,6 @@ void shader_and_transform(Model *m, Camera c, LightingParameters lp, double heig
 
   cudaMalloc(&m->out_vertices, sizeof(double) * problem_size);
 
-  #define MVP_NUM_THREADS 512
   blocks = (problem_size + MVP_NUM_THREADS - 1) / MVP_NUM_THREADS;
   threads = MVP_NUM_THREADS;
   mvp_transform<<<blocks, threads>>>(m->vertices, mvp, m->out_vertices, num_vertices);
@@ -906,7 +945,7 @@ struct Image {
     // Fill kernel call
     int max_threads = 128;
     int blocks = (hw + max_threads - 1) / max_threads;
-    fill<<<blocks, max_threads>>>(z_buffer, 0.0, hw);
+    fill<<<blocks, max_threads>>>(z_buffer, std::numeric_limits<double>::lowest(), hw);
     cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
   }
 
@@ -942,7 +981,7 @@ void Image2PNM(Image img, std::string fn) {
 HOST 
 Image image_cpu(int height, int width) {
   unsigned char * image_data = zeros_cpu<unsigned char>(height, width * 3);
-  double * z_buffer = zeros_cpu(height, width);
+  double * z_buffer = array_cpu(height * width, std::numeric_limits<double>::lowest());
 
   return Image(image_data, z_buffer, height, width);
 }
@@ -950,7 +989,7 @@ Image image_cpu(int height, int width) {
 HOST 
 Image image_cuda(int height, int width) {
   unsigned char * image_data = zeros_cuda<unsigned char>(height * width * 3);
-  double * z_buffer = zeros_cuda(height * width);
+  double * z_buffer = array_cuda(height * width, std::numeric_limits<double>::lowest());
 
   return Image(image_data, z_buffer, height, width);
 }
@@ -1025,17 +1064,14 @@ Line intercept(const double * a, const double * b) {
 
 DEVICE
 void set_pixel_cuda(unsigned char * data, double * z_buffer, const int height, const int width, 
-    int i, int j, double z, double r, double g, double b) {
+    int j, int i, double z, double r, double g, double b) {
   if (i < 0 || j < 0 || i >= height || j >= width)
     return;
+  i = height - i;
   const int pixelIndex = i * width + j;
-  #ifdef  __CUDA_ARCH__
-  gpuAtomicMin(z_buffer + pixelIndex, z);
-  #else
-  z_buffer[pixelIndex] = min(z_buffer[pixelIndex], z);
-  #endif
+  gpuAtomicMax(z_buffer + pixelIndex, z);
   if (z_buffer[pixelIndex] == z) {
-  printf("%d %d  -- color: %f %f %f \n", i, j, r, g, b);
+  //printf("%d %d  -- color: %f %f %f \n", i, j, r, g, b);
     data[pixelIndex * 3 + 0] = r;
     data[pixelIndex * 3 + 1] = g;
     data[pixelIndex * 3 + 2] = b;
@@ -1049,7 +1085,7 @@ double * color_lerp(const double coord_A, const double coord_B, const double coo
   double * out = (double *)(malloc(sizeof(double) * 3));
   double t = (coord_C - coord_A) / (coord_B - coord_A);
   for (int i = 0; i < 3; ++i) {
-    out[i] = color_A[i] * t + color_B[i] * (1 - t);
+    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
   }
   return out;
 }
@@ -1071,7 +1107,7 @@ double * color_lerp(const double * coord_A, const double * coord_B, const double
   double t = f_ca / f_ba;
     
   for (int i = 0; i < 3; ++i) {
-    out[i] = color_A[i] * t + color_B[i] * (1 - t);
+    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
   }
 
   return out;
@@ -1089,14 +1125,14 @@ double scalar_lerp(const double * coord_A, const double * coord_B, const double 
   f_ba = sqrt(f_ba);
   f_ca = sqrt(f_ca);
   double t = f_ca / f_ba;
-  return val_A * t + val_B * (1 - t);
+  return val_A * (1 - t) + val_B * t;
 }
 
 DEVICE
 double scalar_lerp(const double coord_A, const double coord_B, const double coord_C,
     const double val_A, const double val_B) {
   double t = (coord_C - coord_A) / (coord_B - coord_A);
-  return val_A * t + val_B * (1 - t);
+  return val_A * (1 - t) + val_B * t;
 }
 
 DEVICE
@@ -1181,12 +1217,16 @@ void scanline(
           anchorShading);
       free(leftC);
       free(rightC);
-      //if (leftEnd >= rightEnd) {
-      //  swap<double>(&leftZ, &rightZ);
-      //  swap<Color>(&leftColorX, &rightColorX);
-      //  swap<double>(&leftShadingX, &rightShadingX);
-      //  swap<double>(&leftEnd, &rightEnd);
-      //}
+      double **LC = &leftColorX;
+      double **RC = &rightColorX;
+      if (leftEnd >= rightEnd) {
+        swap<double>(&leftZ, &rightZ);
+        //swap<double*>(&leftColorX, &rightColorX);
+        LC = &rightColorX;
+        RC = &leftColorX;
+        swap<double>(&leftShadingX, &rightShadingX);
+        swap<double>(&leftEnd, &rightEnd);
+      }
       //printf("%f %f   --- %f %f \n", rowMin, rowMax, leftEnd, rightEnd);
       for (int c = C441(leftEnd); c <= F441(rightEnd); ++c) {
         double z = scalar_lerp(
@@ -1199,8 +1239,8 @@ void scanline(
             leftEnd, 
             rightEnd, 
             c,
-            leftColorX,
-            rightColorX);
+            LC[0],
+            RC[0]);
         double shading = scalar_lerp(
              leftEnd, 
             rightEnd, 
@@ -1314,7 +1354,6 @@ void rasterize(Image * image, Model model) {
   // To each triangle its own thread
   int problem_size = model.numTriangles;
 
-  #define RASTERIZER_NUM_THREADS 128
   int blocks = (problem_size + RASTERIZER_NUM_THREADS - 1) / RASTERIZER_NUM_THREADS;
   int threads = RASTERIZER_NUM_THREADS;
   rasterization_kernel<<<blocks, threads>>>(
@@ -1364,22 +1403,33 @@ std::string gen_filename(int f) {
 int main() {
   double height = 1000;
   double width = 1000;
-  double f = 0;
-  Image image = image_cuda(height, width);
+  int n_frames = 100;
   Model model = ReadTriangles();
-  Camera camera = GetCamera(f, 1000);
-  LightingParameters lp = GetLighting(camera);
-  shader_and_transform(&model, camera, lp, height, width);
-  CHECK_LAST_CUDA_ERROR();
-  image.clear_zbuffer();
-  CHECK_LAST_CUDA_ERROR();
-  rasterize(&image, model);
-  CHECK_LAST_CUDA_ERROR();
-  if (image.on_device) {
-    Image2PNM(image_to_cpu(image), gen_filename(f));
-  } else {
-    Image2PNM(image, gen_filename(f));
+  Image image = image_cuda(height, width);
+  #ifdef VIDEO
+  for (int f=0; f < n_frames; ++f) {
+    #ifdef VERBOSE
+    std::cout << "Generating frame " << f << std::endl;
+    #endif
+  #else
+  double f = 0;
+  #endif
+    Camera camera = GetCamera(f, n_frames);
+    LightingParameters lp = GetLighting(camera);
+    shader_and_transform(&model, camera, lp, height, width);
+    //CHECK_LAST_CUDA_ERROR();
+    image.clear();
+    //CHECK_LAST_CUDA_ERROR();
+    rasterize(&image, model);
+    CHECK_LAST_CUDA_ERROR();
+    if (image.on_device) {
+      Image2PNM(image_to_cpu(image), gen_filename(f));
+    } else {
+      Image2PNM(image, gen_filename(f));
+    }
+    //CHECK_LAST_CUDA_ERROR();
+  #ifdef VIDEO
   }
-  CHECK_LAST_CUDA_ERROR();
+  #endif
   return 0;
 }

@@ -1,8 +1,8 @@
 SHELL := /bin/bash
 
-.PHONY: clean build run convert test
+.PHONY: clean build run convert
 
-all: clean build run #convert test
+all: clean build run convert
 
 video: clean build-video run convert-video generate-video
 
@@ -50,13 +50,8 @@ convert-video:
 
 generate-video:
 	@echo "Converting to video using FFMPEG"
-	ffmpeg -r 25 -f image2 -s 1000x1000 -i frames/projG_frame%04d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p projG.mp4
+	ffmpeg -r 45 -f image2 -s 1000x1000 -i frames/projG_frame%04d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p projG.mp4
 
 convert:
 	@echo "Converting output to PNG"
 	pnmtopng projG_frame0000.pnm >> projG_frame0000.png
-
-test:
-	@echo "Testing against reference"
-	cp projG.cu test/
-	cd test/ && ./projG_checker && rm a.out && rm projG.cu

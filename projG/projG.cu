@@ -6,16 +6,27 @@ Project G - CUDA
 
 */
 #include <cuda.h>
-#define DEVICE __inline__ __device__
+#include <cuda_runtime_api.h>
+#include <cassert>
+#include <cmath>
+#define DEVICE __device__ inline
 #define HOST __host__
 #define KERNEL __global__
 
 #define INDEX3(i, j) i * 3 + j
 #define INDEX4(i, j) i * 4 + j
 
-#define SHADER_NUM_THREADS     128
+#define N_FRAMES 1000
+
+#define HEIGHT 1000
+#define WIDTH  1000
+
+#define FILL_NUM_THREADS       512
+#define SHADER_NUM_THREADS     256
 #define MVP_NUM_THREADS        128
 #define RASTERIZER_NUM_THREADS 128
+
+#define DATATYPE double
 
 #include <iostream>
 #include <string>
@@ -64,6 +75,23 @@ inline __device__ double gpuAtomicMin(double * address, double val) {
                               });
 }
 
+// Dont use a templated function for this since the addition function defaults to the CUDA built-in.
+inline __device__ float gpuAtomicMax(float * address, float val) {
+  unsigned int* address_as_ull = (unsigned int*)address;
+  unsigned int old = *address_as_ull;
+  unsigned int assumed;
+
+  do {
+    assumed = old;
+    old = atomicCAS(address_as_ull, assumed,
+                    __float_as_int(max(val, __int_as_float(assumed))));
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+  } while (assumed != old);
+
+  return __int_as_float(old);
+}
+
 
 // CUDA error check functions copied from Lei Mao's blog:
 // https://leimao.github.io/blog/Proper-CUDA-Error-Checking/
@@ -107,27 +135,27 @@ void swap(T* a, T* b) {
 
 /// CS441 Ceil function.
 DEVICE
-double C441(double f) {
+DATATYPE C441(DATATYPE f) {
   return ceil(f-0.00001);
 }
 
 /// CS441 Floor function.
 DEVICE
-double F441(double f) {
+DATATYPE F441(DATATYPE f) {
   return floor(f+0.00001);
 }
 
 struct Model {
   int numTriangles;
-  double * vertices;
-  double * out_vertices;
-  double * normals;
-  double * colors;
-  double * shading;
+  DATATYPE * vertices;
+  DATATYPE * out_vertices;
+  DATATYPE * normals;
+  DATATYPE * colors;
+  DATATYPE * shading;
   // int * t_to_v;
 };
 
-char * Read3Numbers(char *tmp, double *v1, double *v2, double *v3) {
+char * Read3Numbers(char *tmp, DATATYPE *v1, DATATYPE *v2, DATATYPE *v3) {
   *v1 = atof(tmp);
   while (*tmp != ' ')
      tmp++;
@@ -177,99 +205,25 @@ Model ReadTriangles() {
   
   Model m;
   m.numTriangles = numTriangles;
-  cudaMalloc(&m.vertices, sizeof(double) * numTriangles * 9);
-  cudaMalloc(&m.normals,  sizeof(double) * numTriangles * 9);
-  cudaMalloc(&m.colors,   sizeof(double) * numTriangles * 9);
-
-  //// Triangle to vertex map
-  ////// Every triangle has 3 pointers to its 3 vertices sorted by y-value,
-  ////// two pointers to the left and right vertices w.r.t the top vertex,
-  ////// and two pointers to the left and right vertices w.r.t the bottom vertex.
-  ////// 3 + 2 + = 7.
-  //cudaMalloc(&m.t_to_v, sizeof(int) * numTriangles * 7);
+  cudaMalloc(&m.vertices, sizeof(DATATYPE) * numTriangles * 9);
+  cudaMalloc(&m.normals,  sizeof(DATATYPE) * numTriangles * 9);
+  cudaMalloc(&m.colors,   sizeof(DATATYPE) * numTriangles * 9);
   
   for (int i = 0 ; i < numTriangles ; i++) {
-    //double x_values[3];
-    //double y_values[3];
-    double coords[9];
-    double colors[9];
-    double normals[9];
+    DATATYPE coords[9];
+    DATATYPE colors[9];
+    DATATYPE normals[9];
     for (int j = 0 ; j < 3 ; j++) {
       tmp = Read3Numbers(tmp, coords + (j*3), coords + (j*3+1), coords + (j*3+2));
-      //x_values[j] = coords[j*3];
-      //y_values[j] = coords[j*3+1];
       tmp += 3; /* space+slash+space */
       tmp = Read3Numbers(tmp, colors + (j*3), colors + (j*3+1), colors + (j*3+2));
       tmp += 3; /* space+slash+space */
       tmp = Read3Numbers(tmp, normals + (j*3), normals + (j*3+1), normals + (j*3+2));
       tmp++;    /* newline */
     }
-    cudaMemcpy(m.vertices + (i * 9),  coords, 9 * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(m.colors   + (i * 9),  colors, 9 * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(m.normals  + (i * 9), normals, 9 * sizeof(double), cudaMemcpyHostToDevice);
-    //int * host_t2v = (int *)malloc(sizeof(int) * 7);
-    //int top_idx = -1;
-    //int mid_idx = -1;
-    //int bot_idx = -1;
-    //int top_left  = -1;
-    //int top_right = -1;
-    //int bot_left  = -1;
-    //int bot_right = -1;
-    //if (y_values[0] >= max(y_values[1], y_values[2])){
-    //  top_idx = 0;
-    //  if (y_values[1] >= y_values[2]) {
-    //    mid_idx = 1;
-    //    bot_idx = 2;
-    //  }
-    //  else {
-    //    mid_idx = 2;
-    //    bot_idx = 1;
-    //  }
-    //}
-    //else if (y_values[1] >= max(y_values[0], y_values[2])){
-    //  top_idx = 1;
-    //  if (y_values[0] >= y_values[2]) {
-    //    mid_idx = 0;
-    //    bot_idx = 2;
-    //  }
-    //  else {
-    //    mid_idx = 2;
-    //    bot_idx = 0;
-    //  }
-    //}
-    //else {
-    //  top_idx = 2;
-    //  if (y_values[0] >= y_values[1]) {
-    //    mid_idx = 0;
-    //    bot_idx = 1;
-    //  }
-    //  else {
-    //    mid_idx = 1;
-    //    bot_idx = 0;
-    //  }
-    //}
-    //if (x_values[mid_idx] >= x_values[bot_idx]) {
-    //  top_right = mid_idx;
-    //  top_left  = bot_idx;
-    //} else {
-    //  top_right = bot_idx;
-    //  top_left  = mid_idx;
-    //}
-    //if (x_values[mid_idx] >= x_values[top_idx]) {
-    //  bot_right = mid_idx;
-    //  bot_left  = top_idx;
-    //} else {
-    //  bot_right = top_idx;
-    //  bot_left  = mid_idx;
-    //}
-    //host_t2v[0] = top_idx;
-    //host_t2v[1] = mid_idx;
-    //host_t2v[2] = bot_idx;
-    //host_t2v[3] = top_left;
-    //host_t2v[4] = top_right;
-    //host_t2v[5] = bot_left;
-    //host_t2v[6] = bot_right;
-    //cudaMemcpy(m.t_to_v + (i * 7), host_t2v, 7 * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(m.vertices + (i * 9),  coords, 9 * sizeof(DATATYPE), cudaMemcpyHostToDevice);
+    cudaMemcpy(m.colors   + (i * 9),  colors, 9 * sizeof(DATATYPE), cudaMemcpyHostToDevice);
+    cudaMemcpy(m.normals  + (i * 9), normals, 9 * sizeof(DATATYPE), cudaMemcpyHostToDevice);
   }
   
   free(buffer);
@@ -277,13 +231,13 @@ Model ReadTriangles() {
 }
 
 struct Camera {
-  double near, far;
-  double angle;
-  double* position;
-  double* focus;
-  double* up;
+  DATATYPE near, far;
+  DATATYPE angle;
+  DATATYPE* position;
+  DATATYPE* focus;
+  DATATYPE* up;
 
-  Camera (double* position, double* focus, double* up, double angle, double near, double far) :
+  Camera (DATATYPE* position, DATATYPE* focus, DATATYPE* up, DATATYPE angle, DATATYPE near, DATATYPE far) :
     position(position),
     focus(focus),
     up(up),
@@ -293,13 +247,13 @@ struct Camera {
 };
 
 struct LightingParameters {
-  double * lightDir;   // The direction of the light source
-  double Ka;           // The coefficient for ambient lighting.
-  double Kd;           // The coefficient for diffuse lighting.
-  double Ks;           // The coefficient for specular lighting.
-  double alpha;        // The exponent term for specular lighting.
+  DATATYPE * lightDir;   // The direction of the light source
+  DATATYPE Ka;           // The coefficient for ambient lighting.
+  DATATYPE Kd;           // The coefficient for diffuse lighting.
+  DATATYPE Ks;           // The coefficient for specular lighting.
+  DATATYPE alpha;        // The exponent term for specular lighting.
 
-  LightingParameters (double* lightDir, double Ka, double Kd, double Ks, double alpha) :
+  LightingParameters (DATATYPE* lightDir, DATATYPE Ka, DATATYPE Kd, DATATYPE Ks, DATATYPE alpha) :
     lightDir(lightDir),
     Ka(Ka),
     Kd(Kd),
@@ -315,15 +269,16 @@ T cot(T v) {
 }
 
 DEVICE
-double device_dot_product(const double * a, const double * b, const int n) {
-  double dp = 0.0;
+DATATYPE device_dot_product(const DATATYPE * a, const DATATYPE * b, const int n) {
+  DATATYPE dp = 0.0;
+  #pragma unroll
   for (int i=0; i < n; ++i)
     dp += a[i] * b[i];
   return dp;
 }
 
 KERNEL
-void cross3(const double* a, const double* b, double* c) {
+void cross3(const DATATYPE* a, const DATATYPE* b, DATATYPE* c) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (linearIndex == 0) {
@@ -334,10 +289,11 @@ void cross3(const double* a, const double* b, double* c) {
 }
 
 KERNEL
-void sum(const double * A, double * sum, const int size) {
+void sum(const DATATYPE * A, DATATYPE * sum, const int size) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (linearIndex == 0) {
+    #pragma unroll
     for (int i = 0; i < size; ++ i) {
       sum[0] += A[i];
     }
@@ -345,13 +301,14 @@ void sum(const double * A, double * sum, const int size) {
 }
 
 KERNEL
-void l2_norm(const double * A, double * norm, const int size) {
+void l2_norm(const DATATYPE * A, DATATYPE * norm, const int size) {
   // norm = ||A||_2
   // A \in R^{size}
   // norm \in R
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (linearIndex == 0) {
+    #pragma unroll
     for (int i = 0; i < size; ++ i) {
       norm[0] += pow(A[i], 2);
     }
@@ -360,7 +317,7 @@ void l2_norm(const double * A, double * norm, const int size) {
 }
 
 KERNEL
-void elementwise_prod(const double * A, const double * B, double * D, const int size) {
+void elementwise_prod(const DATATYPE * A, const DATATYPE * B, DATATYPE * D, const int size) {
   // D = A . B
   // D, A, B \in R^{size}
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -371,7 +328,7 @@ void elementwise_prod(const double * A, const double * B, double * D, const int 
 }
 
 KERNEL
-void elementwise_subtract(const double * A, const double * B, double * D, const int size) {
+void elementwise_subtract(const DATATYPE * A, const DATATYPE * B, DATATYPE * D, const int size) {
   // D = A + B
   // D, A, B \in R^{size}
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -382,7 +339,7 @@ void elementwise_subtract(const double * A, const double * B, double * D, const 
 }
 
 KERNEL
-void elementwise_add(const double * A, const double * B, double * D, const int size) {
+void elementwise_add(const DATATYPE * A, const DATATYPE * B, DATATYPE * D, const int size) {
   // D = A + B
   // D, A, B \in R^{size}
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -393,7 +350,7 @@ void elementwise_add(const double * A, const double * B, double * D, const int s
 }
 
 KERNEL
-void scalar_prod(const double * A, const double * s, double * D, const int size) {
+void scalar_prod(const DATATYPE * A, const DATATYPE * s, DATATYPE * D, const int size) {
   // D = A . s
   // D, A \in R^{size}
   // s \in R
@@ -405,7 +362,7 @@ void scalar_prod(const double * A, const double * s, double * D, const int size)
 }
 
 KERNEL
-void scalar_prod(const double * A, const double s, double * D, const int size) {
+void scalar_prod(const DATATYPE * A, const DATATYPE s, DATATYPE * D, const int size) {
   // D = A . s
   // D, A \in R^{size}
   // s \in R
@@ -417,7 +374,7 @@ void scalar_prod(const double * A, const double s, double * D, const int size) {
 }
 
 KERNEL
-void scalar_div(const double * A, const double * s, double * D, const int size) {
+void scalar_div(const DATATYPE * A, const DATATYPE * s, DATATYPE * D, const int size) {
   // D = A / s
   // D, A \in R^{size}
   // s \in R
@@ -429,7 +386,7 @@ void scalar_div(const double * A, const double * s, double * D, const int size) 
 }
 
 KERNEL
-void scalar_div(const double * A, const double s, double * D, const int size) {
+void scalar_div(const DATATYPE * A, const DATATYPE s, DATATYPE * D, const int size) {
   // D = A / s
   // D, A \in R^{size}
   // s \in R
@@ -441,7 +398,7 @@ void scalar_div(const double * A, const double s, double * D, const int size) {
 }
 
 KERNEL
-void matmul(const double * A, const double * B, double * C, const int m, const int n, const int k) {
+void matmul(const DATATYPE * A, const DATATYPE * B, DATATYPE * C, const int m, const int n, const int k) {
   // C = A B
   // A \in R^{m x k}
   // B \in R^{k x n}
@@ -453,13 +410,14 @@ void matmul(const double * A, const double * B, double * C, const int m, const i
 
     C[linearIndex] = 0.0;
 
+    #pragma unroll
     for (int z=0; z < k; ++z) {
       C[linearIndex] += A[x * k + z] * B[z * n + y]; 
     }
   }
 }
 
-template <typename T = double>
+template <typename T = DATATYPE>
 KERNEL
 void fill(T * data, const T val, const int size) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -469,12 +427,13 @@ void fill(T * data, const T val, const int size) {
   }
 }
 
-template <typename T = double>
+template <typename T = DATATYPE>
 HOST
 T* array_cpu(const int size, T value) {
   T * mat = (T *)malloc(sizeof(T) * size);
 
   // Fill 
+  #pragma unroll
   for (int i = 0; i < size; ++i) {
     mat[i] = value;
   }
@@ -482,14 +441,16 @@ T* array_cpu(const int size, T value) {
   return mat;
 }
 
-template <typename T = double>
+template <typename T = DATATYPE>
 HOST
 T* zeros_cpu(const int m, const int k) {
   int size = m * k;
   T * mat = (T *)malloc(sizeof(T) * size);
 
   // Fill 
+  #pragma unroll
   for (int i = 0; i < m; ++i) {
+    #pragma unroll
     for (int j = 0; j < k; ++j) {
       mat[i * k + j] = 0.0;
     }
@@ -498,37 +459,35 @@ T* zeros_cpu(const int m, const int k) {
   return mat;
 }
 
-template <typename T = double>
+template <typename T = DATATYPE>
 HOST
 T* array_cuda(const int size, T value) {
   T *mat;
   cudaMalloc(&mat, sizeof(T) * size);
 
   // Fill kernel call
-  int max_threads = 128;
-  int blocks = (size + max_threads - 1) / max_threads;
-  fill<T><<<blocks, max_threads>>>(mat, value, size);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  int blocks = (size + FILL_NUM_THREADS - 1) / FILL_NUM_THREADS;
+  fill<T><<<blocks, FILL_NUM_THREADS>>>(mat, value, size);
+  //cudaDeviceSynchronize(); 
 
   return mat;
 }
 
-template <typename T = double>
+template <typename T = DATATYPE>
 HOST
 T* zeros_cuda(const int size) {
   T *mat;
   cudaMalloc(&mat, sizeof(T) * size);
 
   // Fill kernel call
-  int max_threads = 128;
-  int blocks = (size + max_threads - 1) / max_threads;
-  fill<T><<<blocks, max_threads>>>(mat, 0.0, size);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  int blocks = (size + FILL_NUM_THREADS - 1) / FILL_NUM_THREADS;
+  fill<T><<<blocks, FILL_NUM_THREADS>>>(mat, 0.0, size);
+  //cudaDeviceSynchronize(); 
 
   return mat;
 }
 
-template <typename T = double>
+template <typename T = DATATYPE>
 HOST
 T* zeros_cuda(const int m, const int k) {
   int size = m * k;
@@ -538,53 +497,53 @@ T* zeros_cuda(const int m, const int k) {
   // Fill kernel call
   int max_threads = 4;
   int blocks = (size + max_threads - 1) / max_threads;
-  fill<<<blocks, max_threads>>>(mat, 0.0, size);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  fill<T><<<blocks, max_threads>>>(mat, 0.0, size);
+  //cudaDeviceSynchronize(); 
 
   return mat;
 }
 
 HOST
-double* dot_product(const double* a, const double* b, const int size) {
-  double* d = zeros_cuda(1, size);
-  double* dot_prod = zeros_cuda(1, 1);
+DATATYPE* dot_product(const DATATYPE* a, const DATATYPE* b, const int size) {
+  DATATYPE* d = zeros_cuda(1, size);
+  DATATYPE* dot_prod = zeros_cuda(1, 1);
 
   // Hadamard product kernel call
   int max_threads = 4;
   int blocks = (size + max_threads - 1) / max_threads;
   elementwise_prod<<<blocks, max_threads>>>(a, b, d, size);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
 
   // Sum kernel call
   sum<<<1, 1>>>(d, dot_prod, size);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
   return dot_prod;
 }
 
 HOST
-double* normalize(const double* vec, const int size) {
-  double* norm = zeros_cuda(1, 1);
-  double* vec_out = zeros_cuda(1, size);
+DATATYPE* normalize(const DATATYPE* vec, const int size) {
+  DATATYPE* norm = zeros_cuda(1, 1);
+  DATATYPE* vec_out = zeros_cuda(1, size);
 
   // Calculate norm with no parallelism
   // We only do it this way because it's not worth the parallelism in our typical use case (size <= 4)
   l2_norm<<<1, 1>>>(/* vector = */ vec, norm, /* size = */ size);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
 
   // Normalize kernel call
   int max_threads = 4;
   int blocks = (size + max_threads - 1) / max_threads;
   scalar_div<<<blocks, max_threads>>>(vec, norm, vec_out, size);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
   return vec_out;
 }
 
 KERNEL
-void device_transform_kernel(double * mat, const double height, const double width) {
+void device_transform_kernel(DATATYPE * mat, const DATATYPE height, const DATATYPE width) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
   if (linearIndex == 0) {
-    double scale_h = height / 2;
-    double scale_w = width / 2;
+    DATATYPE scale_h = height / 2;
+    DATATYPE scale_w = width / 2;
     mat[INDEX4(0, 0)] = scale_w;
     mat[INDEX4(1, 1)] = scale_h;
     mat[INDEX4(2, 2)] = 1.0;
@@ -595,8 +554,8 @@ void device_transform_kernel(double * mat, const double height, const double wid
 }
 
 KERNEL
-void camera_transform_kernel(double * mat, const double * u_, const double * v_, const double * w_,
-    const double * ut, const double * vt, const double * wt) {
+void camera_transform_kernel(DATATYPE * mat, const DATATYPE * u_, const DATATYPE * v_, const DATATYPE * w_,
+    const DATATYPE * ut, const DATATYPE * vt, const DATATYPE * wt) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
   if (linearIndex == 0) {
     mat[INDEX4(0, 0)] = u_[0];
@@ -617,10 +576,10 @@ void camera_transform_kernel(double * mat, const double * u_, const double * v_,
 }
 
 KERNEL
-void view_transform_kernel(double * mat, const double angle, const double near, const double far) {
+void view_transform_kernel(DATATYPE * mat, const DATATYPE angle, const DATATYPE near, const DATATYPE far) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
   if (linearIndex == 0) {
-    double cot_alpha_div_2 = cot(angle / 2.0);
+    DATATYPE cot_alpha_div_2 = cot(angle / 2.0);
     mat[INDEX4(0, 0)] = cot_alpha_div_2;
     mat[INDEX4(1, 1)] = cot_alpha_div_2;
     mat[INDEX4(2, 2)] = (far + near) / (far - near);
@@ -629,83 +588,83 @@ void view_transform_kernel(double * mat, const double angle, const double near, 
   }
 }
 
-double* device_transform(const double height, const double width) {
-  double* mat = zeros_cuda(4, 4);
+DATATYPE* device_transform(const DATATYPE height, const DATATYPE width) {
+  DATATYPE* mat = zeros_cuda(4, 4);
   device_transform_kernel<<<1, 1>>>(mat, height, width);
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   return mat;
 }
 
-double* camera_transform(Camera camera) {
-  double* mat = zeros_cuda(4, 4);
-  double* w_ = zeros_cuda(1, 3);
-  double* u_ = zeros_cuda(1, 3);
-  double* v_ = zeros_cuda(1, 3);
-  double* t_ = zeros_cuda(1, 3);
+DATATYPE* camera_transform(Camera camera) {
+  DATATYPE* mat = zeros_cuda(4, 4);
+  DATATYPE* w_ = zeros_cuda(1, 3);
+  DATATYPE* u_ = zeros_cuda(1, 3);
+  DATATYPE* v_ = zeros_cuda(1, 3);
+  DATATYPE* t_ = zeros_cuda(1, 3);
 
   // Compute w
   elementwise_subtract<<<1, 3>>>(/* A = */ camera.position, /* B = */ camera.focus, /* out = */ w_, /* size = */ 3);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
   w_ = normalize(/* vec = */ w_, /* size = */ 3);
 
   // Compute u
   cross3<<<1, 1>>>(camera.up, w_, /* out = */ u_);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
   u_ = normalize(/* vec = */ u_, /* size = */ 3);
 
   // Compute v
   cross3<<<1, 1>>>(w_, u_, /* out = */ v_);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
   // No need to normalize v because it's the cross product of two unit vectors
 
   // Compute t
   scalar_prod<<<1, 3>>>(camera.position, -1.0, t_, 3);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
 
   // Compute u t
-  double* ut = dot_product(u_, t_, 3);
-  double* vt = dot_product(v_, t_, 3);
-  double* wt = dot_product(w_, t_, 3);
+  DATATYPE* ut = dot_product(u_, t_, 3);
+  DATATYPE* vt = dot_product(v_, t_, 3);
+  DATATYPE* wt = dot_product(w_, t_, 3);
 
   // Arrange values
   camera_transform_kernel<<<1, 1>>>(mat, u_, v_, w_, ut, vt, wt);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
 
   return mat;
 }
 
-double* view_transform(Camera camera) {
-  double* mat = zeros_cuda(4, 4);
+DATATYPE* view_transform(Camera camera) {
+  DATATYPE* mat = zeros_cuda(4, 4);
   view_transform_kernel<<<1, 1>>>(mat, camera.angle, camera.near, camera.far);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
   return mat;
 }
 
 HOST
-double SineParameterize(int curFrame, int nFrames, int ramp)
+DATATYPE SineParameterize(int curFrame, int nFrames, int ramp)
 {
     int nNonRamp = nFrames-2*ramp;
-    double height = 1./(nNonRamp + 4*ramp/M_PI);
+    DATATYPE height = 1./(nNonRamp + 4*ramp/M_PI);
     if (curFrame < ramp)
     {
-        double factor = 2*height*ramp/M_PI;
-        double eval = cos(M_PI/2*((double)curFrame)/ramp);
+        DATATYPE factor = 2*height*ramp/M_PI;
+        DATATYPE eval = cos(M_PI/2*((DATATYPE)curFrame)/ramp);
         return (1.-eval)*factor;
     }
     else if (curFrame > nFrames-ramp)
     {
         int amount_left = nFrames-curFrame;
-        double factor = 2*height*ramp/M_PI;
-        double eval =cos(M_PI/2*((double)amount_left/ramp));
+        DATATYPE factor = 2*height*ramp/M_PI;
+        DATATYPE eval =cos(M_PI/2*((DATATYPE)amount_left/ramp));
         return 1. - (1-eval)*factor;
     }
-    double amount_in_quad = ((double)curFrame-ramp);
-    double quad_part = amount_in_quad*height;
-    double curve_part = height*(2*ramp)/M_PI;
+    DATATYPE amount_in_quad = ((DATATYPE)curFrame-ramp);
+    DATATYPE quad_part = amount_in_quad*height;
+    DATATYPE curve_part = height*(2*ramp)/M_PI;
     return quad_part+curve_part;
 }
 
-template <typename T = double>
+template <typename T = DATATYPE>
 HOST
 T* to_cpu(T * data_cuda, const int size, const bool free_src = false) {
   T * data_cpu = (T *)malloc(sizeof(T) * size);
@@ -716,10 +675,10 @@ T* to_cpu(T * data_cuda, const int size, const bool free_src = false) {
 }
 
 HOST
-double* to_cuda(double * data_cpu, const int size, const bool free_src = false) {
-  double *data_cuda;
-  cudaMalloc(&data_cuda, sizeof(double) * size);
-  cudaMemcpy(data_cuda, data_cpu, size * sizeof(double), cudaMemcpyHostToDevice);
+DATATYPE* to_cuda(DATATYPE * data_cpu, const int size, const bool free_src = false) {
+  DATATYPE *data_cuda;
+  cudaMalloc(&data_cuda, sizeof(DATATYPE) * size);
+  cudaMemcpy(data_cuda, data_cpu, size * sizeof(DATATYPE), cudaMemcpyHostToDevice);
   if (free_src)
     free(data_cpu);
   return data_cuda;
@@ -727,10 +686,10 @@ double* to_cuda(double * data_cpu, const int size, const bool free_src = false) 
 
 HOST
 Camera GetCamera(int frame, int nframes) {
-  double t = SineParameterize(frame, nframes, nframes/10);
-  double* position = zeros_cpu(1, 3);
-  double* focus = zeros_cpu(1, 3);
-  double* up = zeros_cpu(1, 3);
+  DATATYPE t = SineParameterize(frame, nframes, nframes/10);
+  DATATYPE* position = zeros_cpu(1, 3);
+  DATATYPE* focus = zeros_cpu(1, 3);
+  DATATYPE* up = zeros_cpu(1, 3);
   
   position[0] = 40.0*sin(2*M_PI*t);
   position[1] = 40.0*cos(2*M_PI*t);
@@ -738,9 +697,9 @@ Camera GetCamera(int frame, int nframes) {
   // focus is 0, 0, 0 == zeros
   // up is 0, 1, 0
   up[1] = 1.0;
-  double near = 5.0;
-  double far = 200.0;
-  double angle = M_PI/6.0;
+  DATATYPE near = 5.0;
+  DATATYPE far = 200.0;
+  DATATYPE angle = M_PI/6.0;
   position = to_cuda(position, 3, true);
   focus    = to_cuda(   focus, 3, true);
   up       = to_cuda(      up, 3, true);
@@ -749,46 +708,48 @@ Camera GetCamera(int frame, int nframes) {
 
 HOST
 LightingParameters GetLighting(Camera c) {
-  double Ka = 0.3;
-  double Kd = 0.7;
-  double Ks = 2.8;
-  double alpha = 50.5;
+  DATATYPE Ka = 0.3;
+  DATATYPE Kd = 0.7;
+  DATATYPE Ks = 2.8;
+  DATATYPE alpha = 50.5;
 
-  double* lightDir = zeros_cuda(1, 3);
+  DATATYPE* lightDir = zeros_cuda(1, 3);
   elementwise_subtract<<<1, 3>>>(/* A = */ c.position, /* B = */ c.focus, /* out = */ lightDir, /* size = */ 3);
-  cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+  //cudaDeviceSynchronize(); 
   lightDir = normalize(/* vec = */ lightDir, /* size = */ 3);
 
   return LightingParameters(lightDir, Ka, Kd, Ks, alpha);
 }
 
 HOST
-double* GetTransforms(Camera camera, const double height, const double width) {
-  double* D = device_transform(height, width);
-  double* C = camera_transform(camera);
-  double* V = view_transform(camera);
-  double* CV = zeros_cuda(4, 4);
-  double* output = zeros_cuda(4, 4);
+DATATYPE* GetTransforms(Camera camera, const DATATYPE height, const DATATYPE width) {
+  DATATYPE* D = device_transform(height, width);
+  DATATYPE* C = camera_transform(camera);
+  DATATYPE* V = view_transform(camera);
+  DATATYPE* CV = zeros_cuda(4, 4);
+  DATATYPE* output = zeros_cuda(4, 4);
   // Perform 2 matrix multiplications
   // Both 4x4 inputs and 4x4 output
   // So we'd need 16 threads, one for each output scalar.
   matmul<<<1, 16>>>(C, V, CV, 4, 4, 4);
   matmul<<<1, 16>>>(CV, D, output, 4, 4, 4);
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   return output;
 }
 
 DEVICE
-double * device_view_direction(const double * c, const double * v) {
+DATATYPE * device_view_direction(const DATATYPE * c, const DATATYPE * v) {
   // We're using malloc and not cudaMalloc in device code.
-  double * out = (double *)(malloc(sizeof(double) * 3));
-  double norm = 0;
+  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
+  DATATYPE norm = 0;
+  #pragma unroll
   for (int i=0; i < 3; ++i) {
-    double acc = c[i] - v[i];
+    DATATYPE acc = c[i] - v[i];
     out[i] = acc;
     norm += pow(acc, 2);
   }
   norm = sqrt(norm);
+  #pragma unroll
   for (int i=0; i < 3; ++i) {
     out[i] = out[i] / norm;
   }
@@ -796,10 +757,11 @@ double * device_view_direction(const double * c, const double * v) {
 }
 
 DEVICE
-double * device_elementwise_prod(const double * a, const double b, const int n) {
+DATATYPE * device_elementwise_prod(const DATATYPE * a, const DATATYPE b, const int n) {
   // We're using malloc and not cudaMalloc in device code.
-  double * out = (double *)(malloc(sizeof(double) * n));
+  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
 
+  #pragma unroll
   for (int i=0; i < n; ++i) {
     out[i] = a[i] * b;
   }
@@ -807,10 +769,11 @@ double * device_elementwise_prod(const double * a, const double b, const int n) 
 }
 
 DEVICE
-double * device_elementwise_subtract(const double * a, const double * b, const int n) {
+DATATYPE * device_elementwise_subtract(const DATATYPE * a, const DATATYPE * b, const int n) {
   // We're using malloc and not cudaMalloc in device code.
-  double * out = (double *)(malloc(sizeof(double) * n));
+  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
 
+  #pragma unroll
   for (int i=0; i < n; ++i) {
     out[i] = a[i] - b[i];
   }
@@ -818,10 +781,11 @@ double * device_elementwise_subtract(const double * a, const double * b, const i
 }
 
 DEVICE
-double * device_elementwise_prod_and_subtract(const double * a, const double * b, const double s, const int n) {
+DATATYPE * device_elementwise_prod_and_subtract(const DATATYPE * a, const DATATYPE * b, const DATATYPE s, const int n) {
   // We're using malloc and not cudaMalloc in device code.
-  double * out = (double *)(malloc(sizeof(double) * n));
+  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
 
+  #pragma unroll
   for (int i=0; i < n; ++i) {
     out[i] = s * a[i] - b[i];
   }
@@ -830,48 +794,49 @@ double * device_elementwise_prod_and_subtract(const double * a, const double * b
 
 KERNEL
 void phong_shader(
-    const double * vertex_positions, 
-    const double * vertex_normals, 
-    const double * light_direction,
-    const double * camera_position,
-    double * shading_values,
+    const DATATYPE * vertex_positions, 
+    const DATATYPE * vertex_normals, 
+    const DATATYPE * light_direction,
+    const DATATYPE * camera_position,
+    DATATYPE * shading_values,
     const int num_vertices,
-    const double Ka,
-    const double Kd,
-    const double Ks,
-    const double alpha) {
+    const DATATYPE Ka,
+    const DATATYPE Kd,
+    const DATATYPE Ks,
+    const DATATYPE alpha) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
   if (linearIndex < num_vertices) {
-    double LN = device_dot_product(light_direction, vertex_normals + linearIndex * 3, 3);
-    double diffuse = max(0.0, LN);
+    DATATYPE LN = device_dot_product(light_direction, vertex_normals + linearIndex * 3, 3);
+    DATATYPE diffuse = max(0.0, LN);
 
-    double * view_direction = device_view_direction(camera_position, vertex_positions + linearIndex * 3);
+    DATATYPE * view_direction = device_view_direction(camera_position, vertex_positions + linearIndex * 3);
 
-    double * A = device_elementwise_prod(vertex_normals + linearIndex * 3, (2*LN), 3);
-    double * R = device_elementwise_subtract(A, light_direction, 3);
-    //double * R = device_elementwise_prod_and_subtract(vertex_normals + linearIndex * 3, light_direction, 2*LN, 3);
-    double RV = max(0.0, device_dot_product(R, view_direction, 3));
+    DATATYPE * A = device_elementwise_prod(vertex_normals + linearIndex * 3, (2*LN), 3);
+    DATATYPE * R = device_elementwise_subtract(A, light_direction, 3);
+    //DATATYPE * R = device_elementwise_prod_and_subtract(vertex_normals + linearIndex * 3, light_direction, 2*LN, 3);
+    DATATYPE RV = max(0.0, device_dot_product(R, view_direction, 3));
     free(A);
     free(R);
     free(view_direction);
 
-    double specular = pow(RV, alpha);
+    DATATYPE specular = pow(RV, alpha);
     shading_values[linearIndex] = Ka + Kd * diffuse + Ks * specular;
   }
 }
 
 KERNEL
 void mvp_transform(
-    const double * vertex_positions,
-    const double * mvp,
-    double * out_vertex_positions,
+    const DATATYPE * vertex_positions,
+    const DATATYPE * mvp,
+    DATATYPE * out_vertex_positions,
     const int num_vertices) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
   const int i = linearIndex / 3;
   const int j = linearIndex % 3;
   if (i < num_vertices) {
-    double w = mvp[3 * 4 + 3]; // 4th dimension
-    double accum = mvp[3 * 4 + j]; // 1.0 column
+    DATATYPE w = mvp[3 * 4 + 3]; // 4th dimension
+    DATATYPE accum = mvp[3 * 4 + j]; // 1.0 column
+  #pragma unroll
     for (int k=0; k < 3; ++k) {
       accum += vertex_positions[i * 3 + k] * mvp[k * 4 + j];
       w += vertex_positions[i * 3 + k] * mvp[k * 4 + 3];
@@ -881,12 +846,12 @@ void mvp_transform(
 }
 
 HOST
-void shader_and_transform(Model *m, Camera c, LightingParameters lp, double height, double width) {
-  double* mvp = GetTransforms(c, height, width);
+void shader_and_transform(Model *m, Camera c, LightingParameters lp, DATATYPE height, DATATYPE width) {
+  DATATYPE* mvp = GetTransforms(c, height, width);
   int num_vertices = m->numTriangles * 3;
   int problem_size = m->numTriangles * 9;
 
-  cudaMalloc(&m->shading, sizeof(double) * num_vertices);
+  cudaMalloc(&m->shading, sizeof(DATATYPE) * num_vertices);
 
   int blocks = (problem_size + SHADER_NUM_THREADS - 1) / SHADER_NUM_THREADS;
   int threads = SHADER_NUM_THREADS;
@@ -900,22 +865,22 @@ void shader_and_transform(Model *m, Camera c, LightingParameters lp, double heig
       lp.Ks,
       lp.alpha);
 
-  cudaMalloc(&m->out_vertices, sizeof(double) * problem_size);
+  cudaMalloc(&m->out_vertices, sizeof(DATATYPE) * problem_size);
 
   blocks = (problem_size + MVP_NUM_THREADS - 1) / MVP_NUM_THREADS;
   threads = MVP_NUM_THREADS;
   mvp_transform<<<blocks, threads>>>(m->vertices, mvp, m->out_vertices, num_vertices);
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
 }
 
 struct Image {
   unsigned char * data;
-  double * z_buffer;
+  DATATYPE * z_buffer;
   int height, width;
   int hw, hw3;
   bool on_device;
 
-  Image(unsigned char * data, double * z_buffer, int height, int width, bool on_device = true):
+  Image(unsigned char * data, DATATYPE * z_buffer, int height, int width, bool on_device = true):
     data(data),
     z_buffer(z_buffer),
     height(height),
@@ -934,23 +899,21 @@ struct Image {
   HOST
   void clear_pixels() {
     // Fill kernel call
-    int max_threads = 128;
-    int blocks = (hw3 + max_threads - 1) / max_threads;
-    fill<unsigned char><<<blocks, max_threads>>>(data, 0, hw3);
-    cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+    int blocks = (hw3 + FILL_NUM_THREADS - 1) / FILL_NUM_THREADS;
+    fill<unsigned char><<<blocks, FILL_NUM_THREADS>>>(data, 0, hw3);
+    //cudaDeviceSynchronize(); 
   }
 
   HOST
   void clear_zbuffer() {
     // Fill kernel call
-    int max_threads = 128;
-    int blocks = (hw + max_threads - 1) / max_threads;
-    fill<<<blocks, max_threads>>>(z_buffer, std::numeric_limits<double>::lowest(), hw);
-    cudaDeviceSynchronize(); // We call this on host (CPU) to wait for threads to finish their work.
+    int blocks = (hw + FILL_NUM_THREADS - 1) / FILL_NUM_THREADS;
+    fill<<<blocks, FILL_NUM_THREADS>>>(z_buffer, std::numeric_limits<DATATYPE>::lowest(), hw);
+    //cudaDeviceSynchronize(); 
   }
 
   //DEVICE HOST
-  //void set_pixel(int i, int j, double z, double r, double g, double b) {
+  //void set_pixel(int i, int j, DATATYPE z, DATATYPE r, DATATYPE g, DATATYPE b) {
   //  if (i < 0 || j < 0 || i >= height || j >= width)
   //    return;
   //  const int pixelIndex = i * width + j;
@@ -981,7 +944,7 @@ void Image2PNM(Image img, std::string fn) {
 HOST 
 Image image_cpu(int height, int width) {
   unsigned char * image_data = zeros_cpu<unsigned char>(height, width * 3);
-  double * z_buffer = array_cpu(height * width, std::numeric_limits<double>::lowest());
+  DATATYPE * z_buffer = array_cpu(height * width, std::numeric_limits<DATATYPE>::lowest());
 
   return Image(image_data, z_buffer, height, width);
 }
@@ -989,7 +952,7 @@ Image image_cpu(int height, int width) {
 HOST 
 Image image_cuda(int height, int width) {
   unsigned char * image_data = zeros_cuda<unsigned char>(height * width * 3);
-  double * z_buffer = array_cuda(height * width, std::numeric_limits<double>::lowest());
+  DATATYPE * z_buffer = array_cuda(height * width, std::numeric_limits<DATATYPE>::lowest());
 
   return Image(image_data, z_buffer, height, width);
 }
@@ -1014,15 +977,15 @@ T abs_difference(T a, T b) {
 //// Initialized with a slope and bias, and optionally a "left" and "right" coordinate to support cases
 //// where slope is 0 or infinity.
 struct Line {
-  double m, b, x_left, x_right;
+  DATATYPE m, b, x_left, x_right;
 
   DEVICE
   Line(): m(0), b(0), x_left(-1), x_right(-1) {}
   DEVICE
-  Line (double m, double b, double x_left, double x_right): m(m), b(b), x_left(x_left), x_right(x_right) {}
+  Line (DATATYPE m, DATATYPE b, DATATYPE x_left, DATATYPE x_right): m(m), b(b), x_left(x_left), x_right(x_right) {}
 
   DEVICE
-  double intersect(double y) {
+  DATATYPE intersect(DATATYPE y) {
     if (m == 0){
       assert(x_left >= 0 && x_right >= 0 && x_left == x_right);
       return x_left;
@@ -1031,12 +994,12 @@ struct Line {
   }
 
   DEVICE
-  double leftIntersection(double y) {
+  DATATYPE leftIntersection(DATATYPE y) {
     return (m == 0) ? (x_left) : ((y - b) / m);
   }
 
   DEVICE
-  double rightIntersection(double y) {
+  DATATYPE rightIntersection(DATATYPE y) {
     return (m == 0) ? (x_right) : ((y - b) / m);
   }
 
@@ -1049,7 +1012,7 @@ struct Line {
 };
 
 DEVICE
-Line intercept(const double * a, const double * b) {
+Line intercept(const DATATYPE * a, const DATATYPE * b) {
   if (abs_difference(a[0], b[0]) == 0) {
       // Horizontal line -- to prevent zero division, we just return the leftmost and rightmost X coordinates.
       return Line(0, 0, min(a[0], b[0]), max(a[0], b[0]));
@@ -1057,99 +1020,108 @@ Line intercept(const double * a, const double * b) {
   if (abs_difference(a[1], b[1]) == 0) {
       return Line(); // Vertical lines are considered invalid.
   }
-  double m_ = (b[1] - a[1]) / (b[0] - a[0]);
-  double b_ = b[1] - (m_ * b[0]);
+  DATATYPE m_ = (b[1] - a[1]) / (b[0] - a[0]);
+  DATATYPE b_ = b[1] - (m_ * b[0]);
   return Line(m_, b_, -1, -1);
 }
 
 DEVICE
-void set_pixel_cuda(unsigned char * data, double * z_buffer, const int height, const int width, 
-    int j, int i, double z, double r, double g, double b) {
+void set_pixel_cuda(unsigned char * data, DATATYPE * z_buffer, const int height, const int width, 
+    int j, int i, DATATYPE z, DATATYPE r, DATATYPE g, DATATYPE b) {
   if (i < 0 || j < 0 || i >= height || j >= width)
     return;
   i = height - i;
   const int pixelIndex = i * width + j;
   gpuAtomicMax(z_buffer + pixelIndex, z);
   if (z_buffer[pixelIndex] == z) {
-  //printf("%d %d  -- color: %f %f %f \n", i, j, r, g, b);
     data[pixelIndex * 3 + 0] = r;
     data[pixelIndex * 3 + 1] = g;
     data[pixelIndex * 3 + 2] = b;
   }
 }
 
-DEVICE
-double * color_lerp(const double coord_A, const double coord_B, const double coord_C,
-    const double * color_A, const double * color_B) {
-  // We're using malloc and not cudaMalloc in device code.
-  double * out = (double *)(malloc(sizeof(double) * 3));
-  double t = (coord_C - coord_A) / (coord_B - coord_A);
-  for (int i = 0; i < 3; ++i) {
-    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
-  }
-  return out;
-}
+//DEVICE
+//DATATYPE * color_lerp(const DATATYPE coord_A, const DATATYPE coord_B, const DATATYPE coord_C,
+//    const DATATYPE * color_A, const DATATYPE * color_B) {
+//  // We're using malloc and not cudaMalloc in device code.
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
+//  DATATYPE t = (coord_C - coord_A) / (coord_B - coord_A);
+//  #pragma unroll
+//  for (int i = 0; i < 3; ++i) {
+//    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
+//  }
+//  return out;
+//}
+//
+//DEVICE
+//DATATYPE * color_lerp(const DATATYPE * coord_A, const DATATYPE * coord_B, const DATATYPE * coord_C,
+//    const DATATYPE * color_A, const DATATYPE * color_B) {
+//  // We're using malloc and not cudaMalloc in device code.
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
+//
+//  DATATYPE t = 0.0;
+//  #pragma unroll
+//  for (int i=0; i < 2; ++i) 
+//    t = pow((coord_C[i] - coord_A[i]) / (coord_B[i] - coord_A[i]), 2);
+//  t = sqrt(t);
+//    
+//  #pragma unroll
+//  for (int i = 0; i < 3; ++i) {
+//    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
+//  }
+//
+//  return out;
+//}
+//
+//DEVICE
+//DATATYPE scalar_lerp(const DATATYPE * coord_A, const DATATYPE * coord_B, const DATATYPE * coord_C,
+//    const DATATYPE val_A, const DATATYPE val_B) {
+//  DATATYPE t = 0.0;
+//  #pragma unroll
+//  for (int i=0; i < 2; ++i) 
+//    t += pow((coord_C[i] - coord_A[i]) / (coord_B[i] - coord_A[i]), 2);
+//  t = sqrt(t);
+//  return val_A * (1 - t) + val_B * t;
+//}
+//
+//DEVICE
+//DATATYPE scalar_lerp(const DATATYPE coord_A, const DATATYPE coord_B, const DATATYPE coord_C,
+//    const DATATYPE val_A, const DATATYPE val_B) {
+//  DATATYPE t = (coord_C - coord_A) / (coord_B - coord_A);
+//  return val_A * (1 - t) + val_B * t;
+//}
+//
+//DEVICE
+//DATATYPE * make_coord2d(const DATATYPE A, const DATATYPE B) {
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 2));
+//  out[0] = A;
+//  out[1] = B;
+//  return out;
+//}
+//
+//DEVICE
+//DATATYPE * new_coord2d() {
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 2));
+//  return out;
+//}
+//
+//DEVICE
+//void update_coord2d(DATATYPE * out, const DATATYPE A, const DATATYPE B) {
+//  out[0] = A;
+//  out[1] = B;
+//}
 
-DEVICE
-double * color_lerp(const double * coord_A, const double * coord_B, const double * coord_C,
-    const double * color_A, const double * color_B) {
-  // We're using malloc and not cudaMalloc in device code.
-  double * out = (double *)(malloc(sizeof(double) * 3));
-
-  double f_ba = 0.0;
-  double f_ca = 0.0;
-  for (int i=0; i < 2; ++i) {
-    f_ba += pow(coord_B[i] - coord_A[i], 2);
-    f_ca += pow(coord_C[i] - coord_A[i], 2);
-  }
-  f_ba = sqrt(f_ba);
-  f_ca = sqrt(f_ca);
-  double t = f_ca / f_ba;
-    
-  for (int i = 0; i < 3; ++i) {
-    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
-  }
-
-  return out;
-}
-
-DEVICE
-double scalar_lerp(const double * coord_A, const double * coord_B, const double * coord_C,
-    const double val_A, const double val_B) {
-  double f_ba = 0.0;
-  double f_ca = 0.0;
-  for (int i=0; i < 2; ++i) {
-    f_ba += pow(coord_B[i] - coord_A[i], 2);
-    f_ca += pow(coord_C[i] - coord_A[i], 2);
-  }
-  f_ba = sqrt(f_ba);
-  f_ca = sqrt(f_ca);
-  double t = f_ca / f_ba;
-  return val_A * (1 - t) + val_B * t;
-}
-
-DEVICE
-double scalar_lerp(const double coord_A, const double coord_B, const double coord_C,
-    const double val_A, const double val_B) {
-  double t = (coord_C - coord_A) / (coord_B - coord_A);
-  return val_A * (1 - t) + val_B * t;
-}
-
-DEVICE
-double * make_coord2d(const double A, const double B) {
-  double * out = (double *)(malloc(sizeof(double) * 2));
-  out[0] = A;
-  out[1] = B;
-  return out;
-}
+#define LERP1D(AX, BX, CX) ((CX - AX) / (BX - AX))
+//#define LERP(AX, AY, BX, BY, CX, CY) (sqrt(pow((CX - AX) / (BX - AX), 2) + pow((CY - AY) / (BY - AY), 2)))
+#define LERP(AX, AY, BX, BY, CX, CY) (sqrt(pow(CX - AX, 2) + pow(CY - AY, 2)) / sqrt(pow(BX - AX, 2) + pow(BY - AY, 2)))
 
 DEVICE
 void scanline(
-    const double * position,
-    const double * color,
-    const double * shading,
+    const DATATYPE * position,
+    const DATATYPE * color,
+    const DATATYPE * shading,
     unsigned char * image_data,
-    double * z_buffer,
+    DATATYPE * z_buffer,
     const int height,
     const int width,
     int anchorIdx,
@@ -1157,117 +1129,140 @@ void scanline(
     int rightIdx,
     int minIdx,
     int maxIdx) {
-  const double * anchor = position + anchorIdx * 3;
-  const double * left   = position + leftIdx   * 3;
-  const double * right  = position + rightIdx  * 3;
-  double * anchorColor = (double*)(color + anchorIdx * 3);
-  double *   leftColor = (double*)(color + leftIdx   * 3);
-  double *  rightColor = (double*)(color + rightIdx  * 3);
-  double anchorShading = shading[anchorIdx];
-  double   leftShading = shading[leftIdx  ];
-  double  rightShading = shading[rightIdx ];
-  double rowMin  = position[minIdx * 3 + /* y offset is 1 */ 1];
-  double rowMax  = position[maxIdx * 3 + /* y offset is 1 */ 1];
-  //printf("%f %f \n", rowMin, rowMax);
+  const DATATYPE * anchor = position + anchorIdx * 3;
+  const DATATYPE * left   = position + leftIdx   * 3;
+  const DATATYPE * right  = position + rightIdx  * 3;
+  const DATATYPE * anchorColor = color + anchorIdx * 3;
+  const DATATYPE *   leftColor = color + leftIdx   * 3;
+  const DATATYPE *  rightColor = color + rightIdx  * 3;
+  const DATATYPE anchorShading = shading[anchorIdx];
+  const DATATYPE   leftShading = shading[leftIdx  ];
+  const DATATYPE  rightShading = shading[rightIdx ];
+  const DATATYPE rowMin  = position[minIdx * 3 + /* y offset is 1 */ 1];
+  const DATATYPE rowMax  = position[maxIdx * 3 + /* y offset is 1 */ 1];
 
   /* Scanline */
   Line leftEdge  = intercept( left, anchor);
   Line rightEdge = intercept(right, anchor);
   if (leftEdge.valid() && rightEdge.valid()) {
+  #pragma unroll
     for (int r=C441(rowMin); r <= F441(rowMax); ++r) {
-      double leftEnd  =   leftEdge.leftIntersection(r);
-      double rightEnd = rightEdge.rightIntersection(r);
-      double * leftC = make_coord2d(leftEnd, r);
-      double * rightC = make_coord2d(rightEnd, r);
-      double leftZ = scalar_lerp(
-          left, 
-          anchor, 
-          leftC,
-          left[2], 
-          anchor[2]);
-      double rightZ = scalar_lerp(
-          right, 
-          anchor, 
-          rightC,
-          right[2], 
-          anchor[2]);
-      double * leftColorX = color_lerp(
-          left, 
-          anchor, 
-          leftC,
-          leftColor,
-          anchorColor);
-      double * rightColorX = color_lerp(
-          right, 
-          anchor, 
-          rightC,
-          rightColor,
-          anchorColor);
-      double leftShadingX = scalar_lerp(
-          left, 
-          anchor, 
-          leftC,
-          leftShading, 
-          anchorShading);
-      double rightShadingX = scalar_lerp(
-          right, 
-          anchor, 
-          rightC,
-          rightShading, 
-          anchorShading);
-      free(leftC);
-      free(rightC);
-      double **LC = &leftColorX;
-      double **RC = &rightColorX;
+      DATATYPE leftEnd  =   leftEdge.leftIntersection(r);
+      DATATYPE rightEnd = rightEdge.rightIntersection(r);
+      DATATYPE t = LERP(left[0], left[1], anchor[0], anchor[1], leftEnd, r);
+      DATATYPE leftZ = left[2] * (1 - t) + anchor[2] * t;
+      DATATYPE leftShadingX = leftShading * (1 - t) + anchorShading * t;
+      DATATYPE leftColorR = leftColor[0] * (1 - t) + anchorColor[0] * t;
+      DATATYPE leftColorG = leftColor[1] * (1 - t) + anchorColor[1] * t;
+      DATATYPE leftColorB = leftColor[2] * (1 - t) + anchorColor[2] * t;
+      t = LERP(right[0], right[1], anchor[0], anchor[1], rightEnd, r);
+      DATATYPE rightZ = right[2] * (1 - t) + anchor[2] * t;
+      DATATYPE rightShadingX = rightShading * (1 - t) + anchorShading * t;
+      DATATYPE rightColorR = rightColor[0] * (1 - t) + anchorColor[0] * t;
+      DATATYPE rightColorG = rightColor[1] * (1 - t) + anchorColor[1] * t;
+      DATATYPE rightColorB = rightColor[2] * (1 - t) + anchorColor[2] * t;
+
+
+      //DATATYPE *  leftC = make_coord2d(leftEnd, r);
+      //DATATYPE * rightC = make_coord2d(rightEnd, r);
+      //DATATYPE leftZ = scalar_lerp(
+      //    left, 
+      //    anchor, 
+      //    leftC,
+      //    left[2], 
+      //    anchor[2]);
+      //DATATYPE rightZ = scalar_lerp(
+      //    right, 
+      //    anchor, 
+      //    rightC,
+      //    right[2], 
+      //    anchor[2]);
+      //DATATYPE * leftColorX = color_lerp(
+      //    left, 
+      //    anchor, 
+      //    leftC,
+      //    leftColor,
+      //    anchorColor);
+      //DATATYPE * rightColorX = color_lerp(
+      //    right, 
+      //    anchor, 
+      //    rightC,
+      //    rightColor,
+      //    anchorColor);
+      //DATATYPE leftShadingX = scalar_lerp(
+      //    left, 
+      //    anchor, 
+      //    leftC,
+      //    leftShading, 
+      //    anchorShading);
+      //DATATYPE rightShadingX = scalar_lerp(
+      //    right, 
+      //    anchor, 
+      //    rightC,
+      //    rightShading, 
+      //    anchorShading);
+      //free(leftC);
+      //free(rightC);
       if (leftEnd >= rightEnd) {
-        swap<double>(&leftZ, &rightZ);
-        //swap<double*>(&leftColorX, &rightColorX);
-        LC = &rightColorX;
-        RC = &leftColorX;
-        swap<double>(&leftShadingX, &rightShadingX);
-        swap<double>(&leftEnd, &rightEnd);
+        swap<DATATYPE>(&leftZ, &rightZ);
+        //swap<DATATYPE*>(&leftColorX, &rightColorX);
+        swap<DATATYPE>(&leftColorR, &rightColorR);
+        swap<DATATYPE>(&leftColorG, &rightColorG);
+        swap<DATATYPE>(&leftColorB, &rightColorB);
+        swap<DATATYPE>(&leftShadingX, &rightShadingX);
+        swap<DATATYPE>(&leftEnd, &rightEnd);
       }
-      //printf("%f %f   --- %f %f \n", rowMin, rowMax, leftEnd, rightEnd);
+      #pragma unroll
       for (int c = C441(leftEnd); c <= F441(rightEnd); ++c) {
-        double z = scalar_lerp(
-             leftEnd, 
-            rightEnd, 
-            c,
-            leftZ, 
-            rightZ);
-        double * color = color_lerp(
-            leftEnd, 
-            rightEnd, 
-            c,
-            LC[0],
-            RC[0]);
-        double shading = scalar_lerp(
-             leftEnd, 
-            rightEnd, 
-            c,
-            leftShadingX, 
-            rightShadingX);
+        DATATYPE tc = LERP1D(leftEnd, rightEnd, c);
+        DATATYPE z = leftZ * (1-tc) + rightZ * tc;
+        DATATYPE shading = leftShadingX * (1-tc) + rightShadingX * tc;
+        DATATYPE color_r = leftColorR * (1-tc) + rightColorR * tc;
+        DATATYPE color_g = leftColorG * (1-tc) + rightColorG * tc;
+        DATATYPE color_b = leftColorB * (1-tc) + rightColorB * tc;
         set_pixel_cuda(image_data, z_buffer, height, width, c, r, z, 
-              C441(255.0 * min(max(0.0, color[0] * shading), 1.0)), 
-              C441(255.0 * min(max(0.0, color[1] * shading), 1.0)), 
-              C441(255.0 * min(max(0.0, color[2] * shading), 1.0))
+              C441(255.0 * min(max(0.0, color_r * shading), 1.0)), 
+              C441(255.0 * min(max(0.0, color_g * shading), 1.0)), 
+              C441(255.0 * min(max(0.0, color_b * shading), 1.0))
               );
-        free(color);
+        //DATATYPE z = scalar_lerp(
+        //     leftEnd, 
+        //    rightEnd, 
+        //    c,
+        //    leftZ, 
+        //    rightZ);
+        //DATATYPE * color = color_lerp(
+        //    leftEnd, 
+        //    rightEnd, 
+        //    c,
+        //    leftColorX,
+        //    rightColorX);
+        //DATATYPE shading = scalar_lerp(
+        //     leftEnd, 
+        //    rightEnd, 
+        //    c,
+        //    leftShadingX, 
+        //    rightShadingX);
+        //set_pixel_cuda(image_data, z_buffer, height, width, c, r, z, 
+        //      C441(255.0 * min(max(0.0, color[0] * shading), 1.0)), 
+        //      C441(255.0 * min(max(0.0, color[1] * shading), 1.0)), 
+        //      C441(255.0 * min(max(0.0, color[2] * shading), 1.0))
+        //      );
+        //free(color);
       }
-      free(leftColorX);
-      free(rightColorX);
+      //free(leftColorX);
+      //free(rightColorX);
     }
   }
 }
 
 KERNEL
 void rasterization_kernel(
-    const double * vertex_positions, 
-    const double * vertex_colors,
-    const double * vertex_shadings,
-    //const int * triangle_to_vertex,
+    const DATATYPE * vertex_positions, 
+    const DATATYPE * vertex_colors,
+    const DATATYPE * vertex_shadings,
     unsigned char * image_data,
-    double * z_buffer,
+    DATATYPE * z_buffer,
     const int height,
     const int width,
     const int num_triangles
@@ -1276,18 +1271,10 @@ void rasterization_kernel(
   if (triangleIdx < num_triangles) {
     const int vertexOffset = triangleIdx * 9;
     const int shadingOffset = triangleIdx * 3;
-    const double * position = vertex_positions + vertexOffset;
-    const double * colors   = vertex_colors    + vertexOffset;
-    const double * shadings = vertex_shadings  + shadingOffset;
+    const DATATYPE * position = vertex_positions + vertexOffset;
+    const DATATYPE * colors   = vertex_colors    + vertexOffset;
+    const DATATYPE * shadings = vertex_shadings  + shadingOffset;
 
-    //const int * vertIdx = triangle_to_vertex + triangleIdx * 7;
-    //const int topv = vertIdx[0];
-    //const int midv = vertIdx[1];
-    //const int botv = vertIdx[2];
-    //const int  tlv = vertIdx[3];
-    //const int  trv = vertIdx[4];
-    //const int  blv = vertIdx[5];
-    //const int  brv = vertIdx[6];
     int topv = -1;
     int midv = -1;
     int botv = -1;
@@ -1343,7 +1330,6 @@ void rasterization_kernel(
       blv  = midv;
     }
 
-    //printf("T: %d   %f %f %f\n", triangleIdx, position[topv*3+1], position[midv*3+1], position[botv*3+1]);
     scanline(position, colors, shadings, image_data, z_buffer, height, width, botv, blv, brv, /* rowMin = */botv, /* rowMax = */midv);
     scanline(position, colors, shadings, image_data, z_buffer, height, width, topv, tlv, trv, /* rowMin = */midv, /* rowMax = */topv);
   }
@@ -1360,33 +1346,26 @@ void rasterize(Image * image, Model model) {
       model.out_vertices,
       model.colors,
       model.shading,
-      //model.t_to_v,
       image->data,
       image->z_buffer,
       image->height,
       image->width,
       problem_size);
-  cudaDeviceSynchronize();
-  //double *a = zeros_cuda(1,1);
-  //blocks = (image->height*image->width*3 + threads - 1) / threads;
-  //sum<<<blocks, threads>>>(image->data, a, image->hw3);
   //cudaDeviceSynchronize();
-  //double * a_cpu = to_cpu(a, 1);
-  //std::cout << "SUM: " << a_cpu[0] << "\n";
 }
 
-HOST 
-void PrintMat(double * mat, const int m, const int k) {
-  const int size = m * k;
-  double * mat_cpu = to_cpu(mat, size);
-
-  for (int i = 0; i < m; ++i) {
-    for (int j = 0; j < k; ++j) {
-      std::cout << " " << mat_cpu[i * k + j] << ",";
-    }
-    std::cout << std::endl;
-  }
-}
+//HOST 
+//void PrintMat(DATATYPE * mat, const int m, const int k) {
+//  const int size = m * k;
+//  DATATYPE * mat_cpu = to_cpu(mat, size);
+//
+//  for (int i = 0; i < m; ++i) {
+//    for (int j = 0; j < k; ++j) {
+//      std::cout << " " << mat_cpu[i * k + j] << ",";
+//    }
+//    std::cout << std::endl;
+//  }
+//}
 
 HOST
 std::string gen_filename(int f) {
@@ -1401,27 +1380,24 @@ std::string gen_filename(int f) {
 
 
 int main() {
-  double height = 1000;
-  double width = 1000;
-  int n_frames = 100;
   Model model = ReadTriangles();
-  Image image = image_cuda(height, width);
+  Image image = image_cuda(HEIGHT, WIDTH);
   #ifdef VIDEO
-  for (int f=0; f < n_frames; ++f) {
+  for (int f=0; f < N_FRAMES; ++f) {
     #ifdef VERBOSE
     std::cout << "Generating frame " << f << std::endl;
     #endif
   #else
-  double f = 0;
+  DATATYPE f = 0;
   #endif
-    Camera camera = GetCamera(f, n_frames);
+    Camera camera = GetCamera(f, N_FRAMES);
     LightingParameters lp = GetLighting(camera);
-    shader_and_transform(&model, camera, lp, height, width);
+    shader_and_transform(&model, camera, lp, HEIGHT, WIDTH);
     //CHECK_LAST_CUDA_ERROR();
     image.clear();
     //CHECK_LAST_CUDA_ERROR();
     rasterize(&image, model);
-    CHECK_LAST_CUDA_ERROR();
+    //CHECK_LAST_CUDA_ERROR();
     if (image.on_device) {
       Image2PNM(image_to_cpu(image), gen_filename(f));
     } else {

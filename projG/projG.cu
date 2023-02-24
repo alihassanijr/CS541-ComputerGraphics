@@ -16,15 +16,15 @@ Project G - CUDA
 #define INDEX3(i, j) i * 3 + j
 #define INDEX4(i, j) i * 4 + j
 
-#define N_FRAMES 1000
+#define N_FRAMES 50
 
 #define HEIGHT 1000
 #define WIDTH  1000
 
-#define FILL_NUM_THREADS       512
+#define FILL_NUM_THREADS       128
 #define SHADER_NUM_THREADS     256
 #define MVP_NUM_THREADS        128
-#define RASTERIZER_NUM_THREADS 128
+#define RASTERIZER_NUM_THREADS 256
 
 #define DATATYPE double
 
@@ -93,8 +93,10 @@ inline __device__ float gpuAtomicMax(float * address, float val) {
 }
 
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 // CUDA error check functions copied from Lei Mao's blog:
 // https://leimao.github.io/blog/Proper-CUDA-Error-Checking/
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 #define CHECK_CUDA_ERROR(val) check((val), #val, __FILE__, __LINE__)
 template <typename T>
 void check(T err, const char* const func, const char* const file,
@@ -123,7 +125,10 @@ void checkLast(const char* const file, const int line)
         // std::exit(EXIT_FAILURE);
     }
 }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Imported from Ali's 1F
 /// Value swap
 template <typename T>
 DEVICE
@@ -144,7 +149,10 @@ DEVICE
 DATATYPE F441(DATATYPE f) {
   return floor(f+0.00001);
 }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Model struct will hold vertices as a single matrix, transformed vertices as another, one for normals
+// one for colors, and one for shader values.
 struct Model {
   int numTriangles;
   DATATYPE * vertices;
@@ -152,9 +160,12 @@ struct Model {
   DATATYPE * normals;
   DATATYPE * colors;
   DATATYPE * shading;
-  // int * t_to_v;
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Borrowed from the 1E and 1F starter code
+// Functions that read the aneurysm 3D model from the text file
+// Every triangle read is directly copied into CUDA.
 char * Read3Numbers(char *tmp, DATATYPE *v1, DATATYPE *v2, DATATYPE *v3) {
   *v1 = atof(tmp);
   while (*tmp != ' ')
@@ -229,7 +240,10 @@ Model ReadTriangles() {
   free(buffer);
   return m;
 }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Copied from 1F but slightly modified
 struct Camera {
   DATATYPE near, far;
   DATATYPE angle;
@@ -268,6 +282,8 @@ T cot(T v) {
   return T(1.0) / tan(v);
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Device functions and kernels
 DEVICE
 DATATYPE device_dot_product(const DATATYPE * a, const DATATYPE * b, const int n) {
   DATATYPE dp = 0.0;
@@ -813,7 +829,6 @@ void phong_shader(
 
     DATATYPE * A = device_elementwise_prod(vertex_normals + linearIndex * 3, (2*LN), 3);
     DATATYPE * R = device_elementwise_subtract(A, light_direction, 3);
-    //DATATYPE * R = device_elementwise_prod_and_subtract(vertex_normals + linearIndex * 3, light_direction, 2*LN, 3);
     DATATYPE RV = max(0.0, device_dot_product(R, view_direction, 3));
     free(A);
     free(R);
@@ -911,23 +926,6 @@ struct Image {
     fill<<<blocks, FILL_NUM_THREADS>>>(z_buffer, std::numeric_limits<DATATYPE>::lowest(), hw);
     //cudaDeviceSynchronize(); 
   }
-
-  //DEVICE HOST
-  //void set_pixel(int i, int j, DATATYPE z, DATATYPE r, DATATYPE g, DATATYPE b) {
-  //  if (i < 0 || j < 0 || i >= height || j >= width)
-  //    return;
-  //  const int pixelIndex = i * width + j;
-  //  #ifdef  __CUDA_ARCH__
-  //  gpuAtomicMin(z_buffer + pixelIndex, z);
-  //  #else
-  //  z_buffer[pixelIndex] = min(z_buffer[pixelIndex], z);
-  //  #endif
-  //  if (z_buffer[pixelIndex] == z) {
-  //    data[pixelIndex * 3 + 0] = r;
-  //    data[pixelIndex * 3 + 1] = g;
-  //    data[pixelIndex * 3 + 2] = b;
-  //  }
-  //}
 };
 
 /// Image2PNM: Dumps an Image instance into a PNM file.
@@ -1040,79 +1038,7 @@ void set_pixel_cuda(unsigned char * data, DATATYPE * z_buffer, const int height,
   }
 }
 
-//DEVICE
-//DATATYPE * color_lerp(const DATATYPE coord_A, const DATATYPE coord_B, const DATATYPE coord_C,
-//    const DATATYPE * color_A, const DATATYPE * color_B) {
-//  // We're using malloc and not cudaMalloc in device code.
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
-//  DATATYPE t = (coord_C - coord_A) / (coord_B - coord_A);
-//  #pragma unroll
-//  for (int i = 0; i < 3; ++i) {
-//    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
-//  }
-//  return out;
-//}
-//
-//DEVICE
-//DATATYPE * color_lerp(const DATATYPE * coord_A, const DATATYPE * coord_B, const DATATYPE * coord_C,
-//    const DATATYPE * color_A, const DATATYPE * color_B) {
-//  // We're using malloc and not cudaMalloc in device code.
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
-//
-//  DATATYPE t = 0.0;
-//  #pragma unroll
-//  for (int i=0; i < 2; ++i) 
-//    t = pow((coord_C[i] - coord_A[i]) / (coord_B[i] - coord_A[i]), 2);
-//  t = sqrt(t);
-//    
-//  #pragma unroll
-//  for (int i = 0; i < 3; ++i) {
-//    out[i] = color_A[i] * (1 - t) + color_B[i] * t;
-//  }
-//
-//  return out;
-//}
-//
-//DEVICE
-//DATATYPE scalar_lerp(const DATATYPE * coord_A, const DATATYPE * coord_B, const DATATYPE * coord_C,
-//    const DATATYPE val_A, const DATATYPE val_B) {
-//  DATATYPE t = 0.0;
-//  #pragma unroll
-//  for (int i=0; i < 2; ++i) 
-//    t += pow((coord_C[i] - coord_A[i]) / (coord_B[i] - coord_A[i]), 2);
-//  t = sqrt(t);
-//  return val_A * (1 - t) + val_B * t;
-//}
-//
-//DEVICE
-//DATATYPE scalar_lerp(const DATATYPE coord_A, const DATATYPE coord_B, const DATATYPE coord_C,
-//    const DATATYPE val_A, const DATATYPE val_B) {
-//  DATATYPE t = (coord_C - coord_A) / (coord_B - coord_A);
-//  return val_A * (1 - t) + val_B * t;
-//}
-//
-//DEVICE
-//DATATYPE * make_coord2d(const DATATYPE A, const DATATYPE B) {
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 2));
-//  out[0] = A;
-//  out[1] = B;
-//  return out;
-//}
-//
-//DEVICE
-//DATATYPE * new_coord2d() {
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 2));
-//  return out;
-//}
-//
-//DEVICE
-//void update_coord2d(DATATYPE * out, const DATATYPE A, const DATATYPE B) {
-//  out[0] = A;
-//  out[1] = B;
-//}
-
 #define LERP1D(AX, BX, CX) ((CX - AX) / (BX - AX))
-//#define LERP(AX, AY, BX, BY, CX, CY) (sqrt(pow((CX - AX) / (BX - AX), 2) + pow((CY - AY) / (BY - AY), 2)))
 #define LERP(AX, AY, BX, BY, CX, CY) (sqrt(pow(CX - AX, 2) + pow(CY - AY, 2)) / sqrt(pow(BX - AX, 2) + pow(BY - AY, 2)))
 
 DEVICE
@@ -1161,51 +1087,8 @@ void scanline(
       DATATYPE rightColorR = rightColor[0] * (1 - t) + anchorColor[0] * t;
       DATATYPE rightColorG = rightColor[1] * (1 - t) + anchorColor[1] * t;
       DATATYPE rightColorB = rightColor[2] * (1 - t) + anchorColor[2] * t;
-
-
-      //DATATYPE *  leftC = make_coord2d(leftEnd, r);
-      //DATATYPE * rightC = make_coord2d(rightEnd, r);
-      //DATATYPE leftZ = scalar_lerp(
-      //    left, 
-      //    anchor, 
-      //    leftC,
-      //    left[2], 
-      //    anchor[2]);
-      //DATATYPE rightZ = scalar_lerp(
-      //    right, 
-      //    anchor, 
-      //    rightC,
-      //    right[2], 
-      //    anchor[2]);
-      //DATATYPE * leftColorX = color_lerp(
-      //    left, 
-      //    anchor, 
-      //    leftC,
-      //    leftColor,
-      //    anchorColor);
-      //DATATYPE * rightColorX = color_lerp(
-      //    right, 
-      //    anchor, 
-      //    rightC,
-      //    rightColor,
-      //    anchorColor);
-      //DATATYPE leftShadingX = scalar_lerp(
-      //    left, 
-      //    anchor, 
-      //    leftC,
-      //    leftShading, 
-      //    anchorShading);
-      //DATATYPE rightShadingX = scalar_lerp(
-      //    right, 
-      //    anchor, 
-      //    rightC,
-      //    rightShading, 
-      //    anchorShading);
-      //free(leftC);
-      //free(rightC);
       if (leftEnd >= rightEnd) {
         swap<DATATYPE>(&leftZ, &rightZ);
-        //swap<DATATYPE*>(&leftColorX, &rightColorX);
         swap<DATATYPE>(&leftColorR, &rightColorR);
         swap<DATATYPE>(&leftColorG, &rightColorG);
         swap<DATATYPE>(&leftColorB, &rightColorB);
@@ -1225,33 +1108,7 @@ void scanline(
               C441(255.0 * min(max(0.0, color_g * shading), 1.0)), 
               C441(255.0 * min(max(0.0, color_b * shading), 1.0))
               );
-        //DATATYPE z = scalar_lerp(
-        //     leftEnd, 
-        //    rightEnd, 
-        //    c,
-        //    leftZ, 
-        //    rightZ);
-        //DATATYPE * color = color_lerp(
-        //    leftEnd, 
-        //    rightEnd, 
-        //    c,
-        //    leftColorX,
-        //    rightColorX);
-        //DATATYPE shading = scalar_lerp(
-        //     leftEnd, 
-        //    rightEnd, 
-        //    c,
-        //    leftShadingX, 
-        //    rightShadingX);
-        //set_pixel_cuda(image_data, z_buffer, height, width, c, r, z, 
-        //      C441(255.0 * min(max(0.0, color[0] * shading), 1.0)), 
-        //      C441(255.0 * min(max(0.0, color[1] * shading), 1.0)), 
-        //      C441(255.0 * min(max(0.0, color[2] * shading), 1.0))
-        //      );
-        //free(color);
       }
-      //free(leftColorX);
-      //free(rightColorX);
     }
   }
 }
@@ -1354,19 +1211,6 @@ void rasterize(Image * image, Model model) {
   //cudaDeviceSynchronize();
 }
 
-//HOST 
-//void PrintMat(DATATYPE * mat, const int m, const int k) {
-//  const int size = m * k;
-//  DATATYPE * mat_cpu = to_cpu(mat, size);
-//
-//  for (int i = 0; i < m; ++i) {
-//    for (int j = 0; j < k; ++j) {
-//      std::cout << " " << mat_cpu[i * k + j] << ",";
-//    }
-//    std::cout << std::endl;
-//  }
-//}
-
 HOST
 std::string gen_filename(int f) {
   char str[256];
@@ -1403,7 +1247,7 @@ int main() {
     } else {
       Image2PNM(image, gen_filename(f));
     }
-    //CHECK_LAST_CUDA_ERROR();
+    CHECK_LAST_CUDA_ERROR();
   #ifdef VIDEO
   }
   #endif

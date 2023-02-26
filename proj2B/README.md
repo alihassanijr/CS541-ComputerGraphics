@@ -13,7 +13,7 @@ Hemispheres are used to make eyelids; pretty easy to make, just cut the sphere i
 
 Also added a cone shape; although it's not a cone, it's a cone cut in half. But it's useful in making arms and legs.
 
-There's a `Shape1` that basically makes shapes from "disks" (thin cylinders).
+There's a `Disk` function that basically renders (almost) arbitrary shapes from disks (thin cylinders).
 However, there will be a shading problem when that's used if you look at it from the opposite direction, which will happen
 frequently.
 
@@ -31,13 +31,20 @@ And here's what I finally ended up with:
 
 
 ### Half cones instead of cylinders
-After taking a break to attend to research for a few days, I figured I try a different strategy towards `Shape1` and 
+After taking a break to attend to research for a few days, I figured I try a different strategy towards `Disk` and 
 use my half cones instead, simply because it would give me a smoother transition.
 Tried that, and it works! BUT I have to position the camera very carefully, otherwise it'll still look weird.
 
 I guess I'll stop at this point.
 
 <img src="../assets/outputs/proj2B-4.png" width="500" />
+
+### Go back to cylinders
+
+Why am I so dumb? It was the view all along.
+Went back to cylinders to do disks.
+
+<img src="../assets/outputs/proj2B.png" width="500" />
 
 
 ## Makefile

@@ -99,6 +99,30 @@ void PushVertex(std::vector<float>& coords,
 }
 
 //
+// Sets up a square plane
+//
+void GetSquareData(std::vector<float>& coords, std::vector<float>& normals)
+{
+  glm::vec3 normal(0.0f, 0.0f, 1.0f);
+  glm::vec3 c0(-1.0f, 0.0f, -1.0f);
+  glm::vec3 c1(-1.0f, 0.0f, 1.0f);
+  glm::vec3 c2(1.0f, 0.0f, -1.0f);
+  glm::vec3 c3(1.0f, 0.0f, 1.0f);
+  PushVertex(coords, c0);
+  PushVertex(normals, normal);
+  PushVertex(coords, c1);
+  PushVertex(normals, normal);
+  PushVertex(coords, c2);
+  PushVertex(normals, normal);
+  PushVertex(coords, c3);
+  PushVertex(normals, normal);
+  PushVertex(coords, c1);
+  PushVertex(normals, normal);
+  PushVertex(coords, c2);
+  PushVertex(normals, normal);
+}
+
+//
 // Sets up a cone
 // Z=0 to Z=1.
 //
@@ -327,7 +351,8 @@ class RenderManager
       SPHERE,
       HEMISPHERE,
       CYLINDER,
-      CONE
+      CONE,
+      SQUARE
    };
 
                  RenderManager();
@@ -347,6 +372,8 @@ class RenderManager
    GLuint cylinderNumPrimitives;
    GLuint coneVAO;
    GLuint coneNumPrimitives;
+   GLuint squareVAO;
+   GLuint squareNumPrimitives;
    GLuint mvploc;
    GLuint modelloc;
    GLuint colorloc;
@@ -499,6 +526,11 @@ void RenderManager::Render(ShapeType st, glm::mat4 model)
       glBindVertexArray(coneVAO);
       numPrimitives = coneNumPrimitives;
    }
+   else if (st == SQUARE)
+   {
+      glBindVertexArray(squareVAO);
+      numPrimitives = squareNumPrimitives;
+   }
    MakeModelView(model);
    glUniform3fv(colorloc, 1, &color[0]);
    glDrawElements(GL_TRIANGLES, numPrimitives, GL_UNSIGNED_INT, NULL);
@@ -562,8 +594,16 @@ void RenderManager::SetUpGeometry()
   SetUpVBOs(coneCoords, coneNormals, 
             cone_points_vbo, cone_normals_vbo, cone_indices_vbo);
 
-  GLuint vao[6];
-  glGenVertexArrays(6, vao);
+  std::vector<float> squareCoords;
+  std::vector<float> squareNormals;
+  GetSquareData(squareCoords, squareNormals);
+  squareNumPrimitives = squareCoords.size() / 3;
+  GLuint square_points_vbo, square_normals_vbo, square_indices_vbo;
+  SetUpVBOs(squareCoords, squareNormals, 
+            square_points_vbo, square_normals_vbo, square_indices_vbo);
+
+  GLuint vao[5];
+  glGenVertexArrays(5, vao);
 
   glBindVertexArray(vao[SPHERE]);
   sphereVAO = vao[SPHERE];
@@ -602,6 +642,16 @@ void RenderManager::SetUpGeometry()
   glBindBuffer(GL_ARRAY_BUFFER, cone_normals_vbo);
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cone_indices_vbo);
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+
+  glBindVertexArray(vao[SQUARE]);
+  squareVAO = vao[SQUARE];
+  glBindBuffer(GL_ARRAY_BUFFER, square_points_vbo);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+  glBindBuffer(GL_ARRAY_BUFFER, square_normals_vbo);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, square_indices_vbo);
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
 }
@@ -699,36 +749,7 @@ glm::mat4 gen_axis_rot(int axis) {
   return glm::mat4(1.0);
 }
 
-glm::mat4 Shape1(glm::mat4 modelSoFar, RenderManager &rm, 
-            float scale_start, 
-            float scale_end,
-            float steps, 
-            float length,
-            float rotate_start,
-            float rotate_end,
-            int rotate_axis,
-            int sign,
-            float power = 1.0,
-            int axis = 1,
-            glm::mat4 post_transform = glm::mat4(1.0f)
-            ) {
-  float l = length / steps;
-  for (int i=0; i < int(steps); ++i) {
-    float a = float(i) * l;
-    float m = float(i) / steps;
-    float s = pow(m, power);
-    float sc = scale_start*(1-s) + s*scale_end;
-    float d = rotate_start*(1-m) + m*rotate_end;
-    glm::mat4 scale = gen_scale(axis, sc, l);
-    glm::mat4 shift = gen_translate(axis, sign * a);
-    glm::mat4 rotate = gen_rot(rotate_axis, d);
-    glm::mat4 axis_rot = gen_axis_rot(axis);
-    rm.Render(RenderManager::CONE, modelSoFar*rotate*shift*scale*post_transform*axis_rot);
-  }
-  return modelSoFar * gen_rot(rotate_axis, rotate_end) * gen_translate(axis, sign * length);
-}
-
-glm::mat4 Shape2(glm::mat4 modelSoFar, RenderManager &rm, 
+glm::mat4 Disk(glm::mat4 modelSoFar, RenderManager &rm, 
             float scale_start, 
             float scale_end,
             float steps, 
@@ -872,11 +893,11 @@ void SetUpEyeball(glm::mat4 modelSoFar, glm::mat4 eye_rotation, RenderManager &r
 void SetUpStache(glm::mat4 modelSoFar, RenderManager &rm, int sign) {
   rm.SetColor(99.0f/255.0f, 65.0f/255.0f, 59.0f/255.0f);
   modelSoFar = modelSoFar * RotateMatrix(sign*45, 0, 0, 1);
-  Shape1(modelSoFar, rm, 0.075, 0.001, 100.0, 0.2,
+  Disk(modelSoFar, rm, 0.075, 0.001, 100.0, 0.2,
         0, 0, 2,
         1, 5.0,
         1);
-  Shape1(modelSoFar, rm, 0.075, 0.001, 100.0, 0.1,
+  Disk(modelSoFar, rm, 0.075, 0.001, 100.0, 0.1,
         0, 0, 2,
         -1, 4.0,
         1);
@@ -884,11 +905,11 @@ void SetUpStache(glm::mat4 modelSoFar, RenderManager &rm, int sign) {
 
 void SetUpJaw(glm::mat4 modelSoFar, RenderManager &rm) {
   rm.SetColor(96.0f/255.0f, 66.0f/255.0f, 53.0f/255.0f);
-  Shape1(modelSoFar, rm, 0.075, 0.001, 100.0, 0.2,
+  Disk(modelSoFar, rm, 0.075, 0.001, 100.0, 0.2,
         0, 0, 2,
         1, 4.0,
         0);
-  Shape1(modelSoFar, rm, 0.075, 0.001, 100.0, 0.2,
+  Disk(modelSoFar, rm, 0.075, 0.001, 100.0, 0.2,
         0, 0, 2,
         -1, 4.0,
         0);
@@ -897,22 +918,22 @@ void SetUpJaw(glm::mat4 modelSoFar, RenderManager &rm) {
 void SetUpEar(glm::mat4 modelSoFar, RenderManager &rm, float t) {
   float ext = sin(t/5) * 0.05;
   rm.SetColor(118.0f/255.0f, 94.0f/255.0f, 79.0f/256.0f);
-  modelSoFar = Shape1(modelSoFar, rm, 0.15, 0.15, 100.0, 0.175,
+  modelSoFar = Disk(modelSoFar, rm, 0.15, 0.15, 100.0, 0.175,
         60, 45, 2,
         -1, 4.0,
         1,
         ScaleMatrix(0.1, 1, 1));
-  modelSoFar = Shape1(modelSoFar, rm, 0.15, 0.2, 100.0, 0.225,
+  modelSoFar = Disk(modelSoFar, rm, 0.15, 0.2, 100.0, 0.225,
         0, -15, 2,
         -1, 4.0,
         1,
         ScaleMatrix(0.1, 1, 1));
-  modelSoFar = Shape1(modelSoFar, rm, 0.2, 0.2, 100.0, 0.175,
+  modelSoFar = Disk(modelSoFar, rm, 0.2, 0.2, 100.0, 0.175,
         0, -15, 2,
         -1, 4.0,
         1,
         ScaleMatrix(0.1, 1, 1));
-  modelSoFar = Shape1(modelSoFar, rm, 0.2, 0.05, 100.0, 0.275 + ext,
+  modelSoFar = Disk(modelSoFar, rm, 0.2, 0.05, 100.0, 0.275 + ext,
         -30, -30, 2,
         -1, 2.0,
         1,
@@ -923,11 +944,11 @@ void SetUpTongue(glm::mat4 modelSoFar, RenderManager &rm, float t) {
   float ext = sin(t/5) * 0.05;
   rm.SetColor(1, 78.0f/255.0f, 94.0f/255.0f);
   modelSoFar = modelSoFar * ScaleMatrix(1, 1, 0.1);
-  Shape1(modelSoFar, rm, 0.075, 0.075, 100.0, 0.175,
+  Disk(modelSoFar, rm, 0.075, 0.075, 100.0, 0.175,
         0, 0, 1,
         1, 4.0,
         1);
-  Shape1(modelSoFar, rm, 0.075, 0.001, 100.0, 0.05+ext,
+  Disk(modelSoFar, rm, 0.075, 0.001, 100.0, 0.05+ext,
         0, 0, 1,
         -1, 4.0,
         1);
@@ -935,12 +956,13 @@ void SetUpTongue(glm::mat4 modelSoFar, RenderManager &rm, float t) {
 
 void SetUpMouth(glm::mat4 modelSoFar, RenderManager &rm, float t) {
   float yoffset = sin(t / 5)*0.0125;
+  float yoffset2 = -sin(t / 5)*0.0075;
   float zoffset = -sin(t / 5)*0.005;
   SetUpStache(modelSoFar, rm, /* sign= */ 1);
   modelSoFar = modelSoFar * TranslateMatrix(-0.25, 0, 0);
   SetUpStache(modelSoFar, rm, /* sign= */ -1);
 
-  modelSoFar = modelSoFar * TranslateMatrix(0.125, -0.05, 0);
+  modelSoFar = modelSoFar * TranslateMatrix(0.125, -0.05+yoffset2, 0);
   SetUpJaw(modelSoFar, rm);
 
   modelSoFar = modelSoFar * TranslateMatrix(-0.02, -0.05, 0.1) * RotateMatrix(-20, 1, 0, 0);
@@ -1031,10 +1053,10 @@ void SetUpBody(glm::mat4 modelSoFar, RenderManager &rm, float bellyfactor) {
   neckscale = ScaleMatrix(0.508+neckgrowth, 0.2, 0.508+neckgrowth);
   rm.Render(RenderManager::SPHERE, modelSoFar*neckscale);
   modelSoFar = modelSoFar * TranslateMatrix(0.0, -0.01, 0);
-  modelSoFar = Shape1(modelSoFar, rm, 0.495, 0.575, 500.0, 0.3,
+  modelSoFar = Disk(modelSoFar, rm, 0.495, 0.575, 500.0, 0.3,
         0, 0, 1,
         -1);
-  modelSoFar = Shape1(modelSoFar, rm, 0.575, maxgirth, 500.0, 0.6,
+  modelSoFar = Disk(modelSoFar, rm, 0.575, maxgirth, 500.0, 0.6,
         0, 0, 1,
         -1, 2.0);
   glm::mat4 buttscale = ScaleMatrix(maxgirth, 0.15, maxgirth);

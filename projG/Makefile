@@ -6,6 +6,8 @@ all: clean build run convert
 
 video: clean build-video run convert-video generate-video
 
+benchmark: build-benchmark run
+
 clean:
 	@echo "Cleaning up"
 	@rm -f projG
@@ -35,7 +37,10 @@ build:
 build-video:
 	@echo "Compiling"
 	mkdir -p frames/
-	nvcc projG.cu -DVIDEO -DVERBOSE -DCUSTOM -o projG
+	nvcc projG.cu -DVIDEO -DVERBOSE -o projG
+
+build-benchmark:
+	nvcc projG.cu -DVIDEO -DVERBOSE -DNOWRITE -o projG
 
 run:
 	@echo "Running"

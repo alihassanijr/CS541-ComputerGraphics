@@ -18,7 +18,11 @@ Reach out to alih@uoregon.edu if you have any questions.
 #define INDEX3(i, j) i * 3 + j
 #define INDEX4(i, j) i * 4 + j
 
+#ifdef NOWRITE
+#define N_FRAMES 100000
+#else
 #define N_FRAMES 1000
+#endif
 
 #define HEIGHT 1000
 #define WIDTH  1000
@@ -1296,12 +1300,14 @@ int main() {
     CHECK_LAST_CUDA_ERROR();
     rasterize(&image, model);
     CHECK_LAST_CUDA_ERROR();
+    #ifndef NOWRITE
     if (image.on_device) {
       Image2PNM(image_to_cpu(image), gen_filename(f));
     } else {
       Image2PNM(image, gen_filename(f));
     }
     CHECK_LAST_CUDA_ERROR();
+    #endif
     #ifdef VERBOSE
     timeit(&_t, "Generated frame " + std::to_string(f), _start, "Total time elapsed: ", f+1, _rasterize_start);
     #endif

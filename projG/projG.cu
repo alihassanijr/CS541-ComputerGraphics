@@ -2,7 +2,9 @@
 
 CS 441/541
 
-Project G - CUDA
+Project G - CUDA Rasterizer from scratch.
+
+Reach out to alih@uoregon.edu if you have any questions.
 
 */
 #include <cuda.h>
@@ -16,7 +18,7 @@ Project G - CUDA
 #define INDEX3(i, j) i * 3 + j
 #define INDEX4(i, j) i * 4 + j
 
-#define N_FRAMES 50
+#define N_FRAMES 1000
 
 #define HEIGHT 1000
 #define WIDTH  1000
@@ -31,7 +33,8 @@ Project G - CUDA
 #include <iostream>
 #include <string>
 #include <assert.h>
-#include <limits>
+#include <limits> // Need it for setting an initial z-buffer value
+#include <chrono> // Need this to time our operations
 
 /// CUDA only implements atomicMin and atomicMax for integers.
 /// So we need our own for zbuffer.
@@ -107,8 +110,8 @@ void check(T err, const char* const func, const char* const file,
         std::cerr << "CUDA Runtime Error at: " << file << ":" << line
                   << std::endl;
         std::cerr << cudaGetErrorString(err) << " " << func << std::endl;
-        // We don't exit when we encounter CUDA errors in this example.
-        // std::exit(EXIT_FAILURE);
+        // We should exit when we encounter CUDA errors in this example.
+        std::exit(EXIT_FAILURE);
     }
 }
 
@@ -121,8 +124,8 @@ void checkLast(const char* const file, const int line)
         std::cerr << "CUDA Runtime Error at: " << file << ":" << line
                   << std::endl;
         std::cerr << cudaGetErrorString(err) << std::endl;
-        // We don't exit when we encounter CUDA errors in this example.
-        // std::exit(EXIT_FAILURE);
+        // We should exit when we encounter CUDA errors in this example.
+        std::exit(EXIT_FAILURE);
     }
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -753,60 +756,60 @@ DATATYPE* GetTransforms(Camera camera, const DATATYPE height, const DATATYPE wid
   return output;
 }
 
-DEVICE
-DATATYPE * device_view_direction(const DATATYPE * c, const DATATYPE * v) {
-  // We're using malloc and not cudaMalloc in device code.
-  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
-  DATATYPE norm = 0;
-  #pragma unroll
-  for (int i=0; i < 3; ++i) {
-    DATATYPE acc = c[i] - v[i];
-    out[i] = acc;
-    norm += pow(acc, 2);
-  }
-  norm = sqrt(norm);
-  #pragma unroll
-  for (int i=0; i < 3; ++i) {
-    out[i] = out[i] / norm;
-  }
-  return out;
-}
-
-DEVICE
-DATATYPE * device_elementwise_prod(const DATATYPE * a, const DATATYPE b, const int n) {
-  // We're using malloc and not cudaMalloc in device code.
-  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
-
-  #pragma unroll
-  for (int i=0; i < n; ++i) {
-    out[i] = a[i] * b;
-  }
-  return out;
-}
-
-DEVICE
-DATATYPE * device_elementwise_subtract(const DATATYPE * a, const DATATYPE * b, const int n) {
-  // We're using malloc and not cudaMalloc in device code.
-  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
-
-  #pragma unroll
-  for (int i=0; i < n; ++i) {
-    out[i] = a[i] - b[i];
-  }
-  return out;
-}
-
-DEVICE
-DATATYPE * device_elementwise_prod_and_subtract(const DATATYPE * a, const DATATYPE * b, const DATATYPE s, const int n) {
-  // We're using malloc and not cudaMalloc in device code.
-  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
-
-  #pragma unroll
-  for (int i=0; i < n; ++i) {
-    out[i] = s * a[i] - b[i];
-  }
-  return out;
-}
+//DEVICE
+//DATATYPE * device_view_direction(const DATATYPE * c, const DATATYPE * v) {
+//  // We're using malloc and not cudaMalloc in device code.
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
+//  DATATYPE norm = 0;
+//  #pragma unroll
+//  for (int i=0; i < 3; ++i) {
+//    DATATYPE acc = c[i] - v[i];
+//    out[i] = acc;
+//    norm += pow(acc, 2);
+//  }
+//  norm = sqrt(norm);
+//  #pragma unroll
+//  for (int i=0; i < 3; ++i) {
+//    out[i] = out[i] / norm;
+//  }
+//  return out;
+//}
+//
+//DEVICE
+//DATATYPE * device_elementwise_prod(const DATATYPE * a, const DATATYPE b, const int n) {
+//  // We're using malloc and not cudaMalloc in device code.
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
+//
+//  #pragma unroll
+//  for (int i=0; i < n; ++i) {
+//    out[i] = a[i] * b;
+//  }
+//  return out;
+//}
+//
+//DEVICE
+//DATATYPE * device_elementwise_subtract(const DATATYPE * a, const DATATYPE * b, const int n) {
+//  // We're using malloc and not cudaMalloc in device code.
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
+//
+//  #pragma unroll
+//  for (int i=0; i < n; ++i) {
+//    out[i] = a[i] - b[i];
+//  }
+//  return out;
+//}
+//
+//DEVICE
+//DATATYPE * device_elementwise_prod_and_subtract(const DATATYPE * a, const DATATYPE * b, const DATATYPE s, const int n) {
+//  // We're using malloc and not cudaMalloc in device code.
+//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
+//
+//  #pragma unroll
+//  for (int i=0; i < n; ++i) {
+//    out[i] = s * a[i] - b[i];
+//  }
+//  return out;
+//}
 
 KERNEL
 void phong_shader(
@@ -825,14 +828,34 @@ void phong_shader(
     DATATYPE LN = device_dot_product(light_direction, vertex_normals + linearIndex * 3, 3);
     DATATYPE diffuse = max(0.0, LN);
 
-    DATATYPE * view_direction = device_view_direction(camera_position, vertex_positions + linearIndex * 3);
+    // The preferred way to do it, because we're defining vectors as arrays... the way it's supposed to be done.
+    // But malloc and free in threads apparently introduce overheads that make it slower for our case.
+    // So we should just stick to manually computing view direction and reflection vectors and performing their 
+    // dot products to minimize latency.
 
-    DATATYPE * A = device_elementwise_prod(vertex_normals + linearIndex * 3, (2*LN), 3);
-    DATATYPE * R = device_elementwise_subtract(A, light_direction, 3);
-    DATATYPE RV = max(0.0, device_dot_product(R, view_direction, 3));
-    free(A);
-    free(R);
-    free(view_direction);
+    //DATATYPE * view_direction = device_view_direction(camera_position, vertex_positions + linearIndex * 3);
+    //DATATYPE * R = device_elementwise_prod_and_subtract(vertex_normals + linearIndex * 3, light_direction, 2*LN, 3);
+    //
+    //DATATYPE RV = max(0.0, device_dot_product(R, view_direction, 3));
+    //free(R);
+    //free(view_direction);
+
+    DATATYPE view_direction_x = camera_position[0] - vertex_positions[linearIndex*3 + 0];
+    DATATYPE view_direction_y = camera_position[1] - vertex_positions[linearIndex*3 + 1];
+    DATATYPE view_direction_z = camera_position[2] - vertex_positions[linearIndex*3 + 2];
+    DATATYPE view_direction_norm = sqrt(pow(view_direction_x, 2) + pow(view_direction_y, 2) + pow(view_direction_z, 2));
+    view_direction_x /= view_direction_norm;
+    view_direction_y /= view_direction_norm;
+    view_direction_z /= view_direction_norm;
+    DATATYPE reflection_x = 2 * LN * vertex_normals[linearIndex * 3 + 0] - light_direction[0];
+    DATATYPE reflection_y = 2 * LN * vertex_normals[linearIndex * 3 + 1] - light_direction[1];
+    DATATYPE reflection_z = 2 * LN * vertex_normals[linearIndex * 3 + 2] - light_direction[2];
+
+    DATATYPE RV = max(0.0, 
+        (reflection_x * view_direction_x) + 
+        (reflection_y * view_direction_y) + 
+        (reflection_z * view_direction_z) 
+        );
 
     DATATYPE specular = pow(RV, alpha);
     shading_values[linearIndex] = Ka + Kd * diffuse + Ks * specular;
@@ -1222,32 +1245,66 @@ std::string gen_filename(int f) {
   return str;
 }
 
+// get_time
+// Uses chrono to get time in milliseconds, so that we can get seconds with millisecond precision.
+double get_time() {
+  using namespace std::chrono;
+  return double(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count()) / 1000;
+}
+
+// timeit
+// Just a quick function to calculate time elapsed since last call with a pointer,
+// along with an optional total time elapsed, and frames per second, if the required arguments
+// are passed.
+void timeit(
+    double * _timer, std::string message = "Timed: ", 
+    double start_time = -1.0, std::string message_total = "Total: ",
+    int frames = 0,
+    double rasterize_start_time = -1.0, std::string message_fps = "Rate: ") {
+  printf("%s    %f seconds", message.c_str(), get_time() - _timer[0]);
+  _timer[0] = get_time();
+  if (rasterize_start_time > 0 && frames > 0) {
+    printf("    [ %s %f fps ]", message_fps.c_str(), frames / (get_time() - rasterize_start_time));
+  }
+  if (start_time > 0) {
+    printf("    %s    %f seconds", message_total.c_str(), get_time() - start_time);
+  }
+  printf("\n");
+}
+
 
 int main() {
+  double _t = get_time();
+  double _start = get_time();
   Model model = ReadTriangles();
+  cudaDeviceSynchronize();
+  timeit(&_t, "Read triangles and copied to device: ", _start, "Total time elapsed: ");
+  
   Image image = image_cuda(HEIGHT, WIDTH);
+  timeit(&_t, "Set up image: ", _start, "Total time elapsed: ");
+  double _rasterize_start = get_time();
   #ifdef VIDEO
   for (int f=0; f < N_FRAMES; ++f) {
-    #ifdef VERBOSE
-    std::cout << "Generating frame " << f << std::endl;
-    #endif
   #else
   DATATYPE f = 0;
   #endif
     Camera camera = GetCamera(f, N_FRAMES);
     LightingParameters lp = GetLighting(camera);
     shader_and_transform(&model, camera, lp, HEIGHT, WIDTH);
-    //CHECK_LAST_CUDA_ERROR();
+    CHECK_LAST_CUDA_ERROR();
     image.clear();
-    //CHECK_LAST_CUDA_ERROR();
+    CHECK_LAST_CUDA_ERROR();
     rasterize(&image, model);
-    //CHECK_LAST_CUDA_ERROR();
+    CHECK_LAST_CUDA_ERROR();
     if (image.on_device) {
       Image2PNM(image_to_cpu(image), gen_filename(f));
     } else {
       Image2PNM(image, gen_filename(f));
     }
     CHECK_LAST_CUDA_ERROR();
+    #ifdef VERBOSE
+    timeit(&_t, "Generated frame " + std::to_string(f), _start, "Total time elapsed: ", f+1, _rasterize_start);
+    #endif
   #ifdef VIDEO
   }
   #endif

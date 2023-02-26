@@ -99,6 +99,30 @@ void PushVertex(std::vector<float>& coords,
 }
 
 //
+// Sets up a square plane
+//
+void GetSquareData(std::vector<float>& coords, std::vector<float>& normals)
+{
+  glm::vec3 normal(0.0f, 0.0f, 1.0f);
+  glm::vec3 c0(-1.0f, 0.0f, -1.0f);
+  glm::vec3 c1(-1.0f, 0.0f, 1.0f);
+  glm::vec3 c2(1.0f, 0.0f, -1.0f);
+  glm::vec3 c3(1.0f, 0.0f, 1.0f);
+  PushVertex(coords, c0);
+  PushVertex(normals, normal);
+  PushVertex(coords, c1);
+  PushVertex(normals, normal);
+  PushVertex(coords, c2);
+  PushVertex(normals, normal);
+  PushVertex(coords, c3);
+  PushVertex(normals, normal);
+  PushVertex(coords, c1);
+  PushVertex(normals, normal);
+  PushVertex(coords, c2);
+  PushVertex(normals, normal);
+}
+
+//
 // Sets up a cone
 // Z=0 to Z=1.
 //
@@ -327,7 +351,8 @@ class RenderManager
       SPHERE,
       HEMISPHERE,
       CYLINDER,
-      CONE
+      CONE,
+      SQUARE
    };
 
                  RenderManager();
@@ -347,6 +372,8 @@ class RenderManager
    GLuint cylinderNumPrimitives;
    GLuint coneVAO;
    GLuint coneNumPrimitives;
+   GLuint squareVAO;
+   GLuint squareNumPrimitives;
    GLuint mvploc;
    GLuint modelloc;
    GLuint colorloc;
@@ -499,6 +526,11 @@ void RenderManager::Render(ShapeType st, glm::mat4 model)
       glBindVertexArray(coneVAO);
       numPrimitives = coneNumPrimitives;
    }
+   else if (st == SQUARE)
+   {
+      glBindVertexArray(squareVAO);
+      numPrimitives = squareNumPrimitives;
+   }
    MakeModelView(model);
    glUniform3fv(colorloc, 1, &color[0]);
    glDrawElements(GL_TRIANGLES, numPrimitives, GL_UNSIGNED_INT, NULL);
@@ -562,8 +594,16 @@ void RenderManager::SetUpGeometry()
   SetUpVBOs(coneCoords, coneNormals, 
             cone_points_vbo, cone_normals_vbo, cone_indices_vbo);
 
-  GLuint vao[6];
-  glGenVertexArrays(6, vao);
+  std::vector<float> squareCoords;
+  std::vector<float> squareNormals;
+  GetSquareData(squareCoords, squareNormals);
+  squareNumPrimitives = squareCoords.size() / 3;
+  GLuint square_points_vbo, square_normals_vbo, square_indices_vbo;
+  SetUpVBOs(squareCoords, squareNormals, 
+            square_points_vbo, square_normals_vbo, square_indices_vbo);
+
+  GLuint vao[5];
+  glGenVertexArrays(5, vao);
 
   glBindVertexArray(vao[SPHERE]);
   sphereVAO = vao[SPHERE];
@@ -602,6 +642,16 @@ void RenderManager::SetUpGeometry()
   glBindBuffer(GL_ARRAY_BUFFER, cone_normals_vbo);
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cone_indices_vbo);
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+
+  glBindVertexArray(vao[SQUARE]);
+  squareVAO = vao[SQUARE];
+  glBindBuffer(GL_ARRAY_BUFFER, square_points_vbo);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+  glBindBuffer(GL_ARRAY_BUFFER, square_normals_vbo);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, square_indices_vbo);
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
 }

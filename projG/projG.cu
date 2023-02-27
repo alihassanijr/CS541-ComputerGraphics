@@ -397,26 +397,14 @@ void scalar_prod(const DATATYPE * A, const DATATYPE s, DATATYPE * D, const int s
 }
 
 KERNEL
-void scalar_div(const DATATYPE * A, const DATATYPE * s, DATATYPE * D, const int size) {
+void scalar_div_inplace(DATATYPE * A, const DATATYPE s, const int size) {
   // D = A / s
   // D, A \in R^{size}
   // s \in R
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (linearIndex < size && s != 0) {
-    D[linearIndex] = A[linearIndex] / s[0];
-  }
-}
-
-KERNEL
-void scalar_div(const DATATYPE * A, const DATATYPE s, DATATYPE * D, const int size) {
-  // D = A / s
-  // D, A \in R^{size}
-  // s \in R
-  const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
-
-  if (linearIndex < size && s != 0) {
-    D[linearIndex] = A[linearIndex] / s;
+    A[linearIndex] = A[linearIndex] / s;
   }
 }
 
@@ -527,7 +515,7 @@ T* zeros_cuda(const int m, const int k) {
 }
 
 HOST
-DATATYPE* dot_product(const DATATYPE* a, const DATATYPE* b, const int size) {
+DATATYPE dot_product(const DATATYPE* a, const DATATYPE* b, const int size) {
   DATATYPE* d = zeros_cuda(1, size);
   DATATYPE* dot_prod = zeros_cuda(1, 1);
 
@@ -540,25 +528,30 @@ DATATYPE* dot_product(const DATATYPE* a, const DATATYPE* b, const int size) {
   // Sum kernel call
   sum<<<1, 1>>>(d, dot_prod, size);
   //cudaDeviceSynchronize(); 
-  return dot_prod;
+  DATATYPE result[1];
+  cudaFree(d);
+  cudaMemcpy(result, dot_prod, sizeof(DATATYPE), cudaMemcpyDeviceToHost);
+  cudaFree(dot_prod);
+  return result[0];
 }
 
 HOST
-DATATYPE* normalize(const DATATYPE* vec, const int size) {
+void normalize(DATATYPE* vec, const int size) {
   DATATYPE* norm = zeros_cuda(1, 1);
-  DATATYPE* vec_out = zeros_cuda(1, size);
+  DATATYPE norm_cpu[1];
 
   // Calculate norm with no parallelism
   // We only do it this way because it's not worth the parallelism in our typical use case (size <= 4)
   l2_norm<<<1, 1>>>(/* vector = */ vec, norm, /* size = */ size);
+  cudaMemcpy(norm_cpu, norm, sizeof(DATATYPE), cudaMemcpyDeviceToHost);
+  cudaFree(norm);
   //cudaDeviceSynchronize(); 
 
   // Normalize kernel call
   int max_threads = 4;
   int blocks = (size + max_threads - 1) / max_threads;
-  scalar_div<<<blocks, max_threads>>>(vec, norm, vec_out, size);
+  scalar_div_inplace<<<blocks, max_threads>>>(vec, norm_cpu[0], size);
   //cudaDeviceSynchronize(); 
-  return vec_out;
 }
 
 KERNEL
@@ -578,7 +571,7 @@ void device_transform_kernel(DATATYPE * mat, const DATATYPE height, const DATATY
 
 KERNEL
 void camera_transform_kernel(DATATYPE * mat, const DATATYPE * u_, const DATATYPE * v_, const DATATYPE * w_,
-    const DATATYPE * ut, const DATATYPE * vt, const DATATYPE * wt) {
+    const DATATYPE ut, const DATATYPE vt, const DATATYPE wt) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
   if (linearIndex == 0) {
     mat[INDEX4(0, 0)] = u_[0];
@@ -591,9 +584,9 @@ void camera_transform_kernel(DATATYPE * mat, const DATATYPE * u_, const DATATYPE
     mat[INDEX4(2, 1)] = v_[2];
     mat[INDEX4(2, 2)] = w_[2];
 
-    mat[INDEX4(3, 0)] = ut[0];
-    mat[INDEX4(3, 1)] = vt[0];
-    mat[INDEX4(3, 2)] = wt[0];
+    mat[INDEX4(3, 0)] = ut;
+    mat[INDEX4(3, 1)] = vt;
+    mat[INDEX4(3, 2)] = wt;
     mat[INDEX4(3, 3)] = 1.0;
   }
 }
@@ -628,12 +621,12 @@ DATATYPE* camera_transform(Camera camera) {
   // Compute w
   elementwise_subtract<<<1, 3>>>(/* A = */ camera.position, /* B = */ camera.focus, /* out = */ w_, /* size = */ 3);
   //cudaDeviceSynchronize(); 
-  w_ = normalize(/* vec = */ w_, /* size = */ 3);
+  normalize(/* vec = */ w_, /* size = */ 3);
 
   // Compute u
   cross3<<<1, 1>>>(camera.up, w_, /* out = */ u_);
   //cudaDeviceSynchronize(); 
-  u_ = normalize(/* vec = */ u_, /* size = */ 3);
+  normalize(/* vec = */ u_, /* size = */ 3);
 
   // Compute v
   cross3<<<1, 1>>>(w_, u_, /* out = */ v_);
@@ -645,13 +638,17 @@ DATATYPE* camera_transform(Camera camera) {
   //cudaDeviceSynchronize(); 
 
   // Compute u t
-  DATATYPE* ut = dot_product(u_, t_, 3);
-  DATATYPE* vt = dot_product(v_, t_, 3);
-  DATATYPE* wt = dot_product(w_, t_, 3);
+  DATATYPE ut = dot_product(u_, t_, 3);
+  DATATYPE vt = dot_product(v_, t_, 3);
+  DATATYPE wt = dot_product(w_, t_, 3);
 
   // Arrange values
   camera_transform_kernel<<<1, 1>>>(mat, u_, v_, w_, ut, vt, wt);
   //cudaDeviceSynchronize(); 
+  cudaFree(w_);
+  cudaFree(u_);
+  cudaFree(v_);
+  cudaFree(t_);
 
   return mat;
 }
@@ -739,7 +736,7 @@ LightingParameters GetLighting(Camera c) {
   DATATYPE* lightDir = zeros_cuda(1, 3);
   elementwise_subtract<<<1, 3>>>(/* A = */ c.position, /* B = */ c.focus, /* out = */ lightDir, /* size = */ 3);
   //cudaDeviceSynchronize(); 
-  lightDir = normalize(/* vec = */ lightDir, /* size = */ 3);
+  normalize(/* vec = */ lightDir, /* size = */ 3);
 
   return LightingParameters(lightDir, Ka, Kd, Ks, alpha);
 }
@@ -757,6 +754,7 @@ DATATYPE* GetTransforms(Camera camera, const DATATYPE height, const DATATYPE wid
   matmul<<<1, 16>>>(C, V, CV, 4, 4, 4);
   matmul<<<1, 16>>>(CV, D, output, 4, 4, 4);
   //cudaDeviceSynchronize();
+  cudaFree(CV);
   return output;
 }
 
@@ -1307,10 +1305,14 @@ int main() {
       Image2PNM(image, gen_filename(f));
     }
     CHECK_LAST_CUDA_ERROR();
+    #else
+    cudaDeviceSynchronize();
     #endif
     #ifdef VERBOSE
     timeit(&_t, "Generated frame " + std::to_string(f), _start, "Total time elapsed: ", f+1, _rasterize_start);
     #endif
+    cudaFree(model.shading);
+    cudaFree(model.out_vertices);
   #ifdef VIDEO
   }
   #endif

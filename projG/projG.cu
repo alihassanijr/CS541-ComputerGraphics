@@ -32,7 +32,11 @@ Reach out to alih@uoregon.edu if you have any questions.
 #define MVP_NUM_THREADS        128
 #define RASTERIZER_NUM_THREADS 256
 
+#ifdef FLOAT32
+#define DATATYPE float
+#else
 #define DATATYPE double
+#endif
 
 #include <iostream>
 #include <string>
@@ -758,61 +762,6 @@ DATATYPE* GetTransforms(Camera camera, const DATATYPE height, const DATATYPE wid
   return output;
 }
 
-//DEVICE
-//DATATYPE * device_view_direction(const DATATYPE * c, const DATATYPE * v) {
-//  // We're using malloc and not cudaMalloc in device code.
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * 3));
-//  DATATYPE norm = 0;
-//  #pragma unroll
-//  for (int i=0; i < 3; ++i) {
-//    DATATYPE acc = c[i] - v[i];
-//    out[i] = acc;
-//    norm += pow(acc, 2);
-//  }
-//  norm = sqrt(norm);
-//  #pragma unroll
-//  for (int i=0; i < 3; ++i) {
-//    out[i] = out[i] / norm;
-//  }
-//  return out;
-//}
-//
-//DEVICE
-//DATATYPE * device_elementwise_prod(const DATATYPE * a, const DATATYPE b, const int n) {
-//  // We're using malloc and not cudaMalloc in device code.
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
-//
-//  #pragma unroll
-//  for (int i=0; i < n; ++i) {
-//    out[i] = a[i] * b;
-//  }
-//  return out;
-//}
-//
-//DEVICE
-//DATATYPE * device_elementwise_subtract(const DATATYPE * a, const DATATYPE * b, const int n) {
-//  // We're using malloc and not cudaMalloc in device code.
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
-//
-//  #pragma unroll
-//  for (int i=0; i < n; ++i) {
-//    out[i] = a[i] - b[i];
-//  }
-//  return out;
-//}
-//
-//DEVICE
-//DATATYPE * device_elementwise_prod_and_subtract(const DATATYPE * a, const DATATYPE * b, const DATATYPE s, const int n) {
-//  // We're using malloc and not cudaMalloc in device code.
-//  DATATYPE * out = (DATATYPE *)(malloc(sizeof(DATATYPE) * n));
-//
-//  #pragma unroll
-//  for (int i=0; i < n; ++i) {
-//    out[i] = s * a[i] - b[i];
-//  }
-//  return out;
-//}
-
 KERNEL
 void phong_shader(
     const DATATYPE * vertex_positions, 
@@ -830,17 +779,11 @@ void phong_shader(
     DATATYPE LN = device_dot_product(light_direction, vertex_normals + linearIndex * 3, 3);
     DATATYPE diffuse = max(0.0, LN);
 
-    // The preferred way to do it, because we're defining vectors as arrays... the way it's supposed to be done.
+    // The preferred way to do it is by keeping these vectors as arrays, and calling device functions that perform 
+    // vector operations.
     // But malloc and free in threads apparently introduce overheads that make it slower for our case.
     // So we should just stick to manually computing view direction and reflection vectors and performing their 
     // dot products to minimize latency.
-
-    //DATATYPE * view_direction = device_view_direction(camera_position, vertex_positions + linearIndex * 3);
-    //DATATYPE * R = device_elementwise_prod_and_subtract(vertex_normals + linearIndex * 3, light_direction, 2*LN, 3);
-    //
-    //DATATYPE RV = max(0.0, device_dot_product(R, view_direction, 3));
-    //free(R);
-    //free(view_direction);
 
     DATATYPE view_direction_x = camera_position[0] - vertex_positions[linearIndex*3 + 0];
     DATATYPE view_direction_y = camera_position[1] - vertex_positions[linearIndex*3 + 1];
@@ -1103,6 +1046,9 @@ void scanline(
       DATATYPE t = LERP(left[0], left[1], anchor[0], anchor[1], leftEnd, r);
       DATATYPE leftZ = left[2] * (1 - t) + anchor[2] * t;
       DATATYPE leftShadingX = leftShading * (1 - t) + anchorShading * t;
+
+      // Again, the preferred way to do this is by keeping colors as arrays, and calling device functions that perform vector 
+      // operations. But doing so, along with malloc and free made it so much slower for our case.
       DATATYPE leftColorR = leftColor[0] * (1 - t) + anchorColor[0] * t;
       DATATYPE leftColorG = leftColor[1] * (1 - t) + anchorColor[1] * t;
       DATATYPE leftColorB = leftColor[2] * (1 - t) + anchorColor[2] * t;

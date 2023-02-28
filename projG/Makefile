@@ -4,7 +4,11 @@ SHELL := /bin/bash
 
 all: clean build run convert
 
+png: clean build-png run
+
 video: clean build-video run convert-video generate-video
+
+video-png: clean build-video-png run generate-video
 
 benchmark: build-benchmark run
 
@@ -34,10 +38,19 @@ build:
 	@echo "Compiling"
 	nvcc projG.cu -o projG
 
+build-png:
+	@echo "Compiling"
+	nvcc projG.cu -DWRITEPNG -o projG
+
 build-video:
 	@echo "Compiling"
 	mkdir -p frames/
 	nvcc projG.cu -DVIDEO -DVERBOSE -o projG
+
+build-video-png:
+	@echo "Compiling"
+	mkdir -p frames/
+	nvcc projG.cu -DWRITEPNG -DVIDEO -DVERBOSE -o projG
 
 build-benchmark:
 	nvcc projG.cu -DVIDEO -DVERBOSE -DNOWRITE -o projG

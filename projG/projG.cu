@@ -44,6 +44,22 @@ Reach out to alih@uoregon.edu if you have any questions.
 #include <limits> // Need it for setting an initial z-buffer value
 #include <chrono> // Need this to time our operations
 
+#ifdef WRITEPNG
+// Use stb_image to write PNGs directly
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image/stb_image_write.h"
+
+void write_image(
+    std::string filename, 
+    unsigned char* image_data, 
+    int width, 
+    int height) {
+  stbi_write_png(filename.c_str(), width, height, 3, image_data, width * 3);
+}
+#endif
+
 /// CUDA only implements atomicMin and atomicMax for integers.
 /// So we need our own for zbuffer.
 /// This is borrowed from PyTorch's ATen backend.
@@ -896,6 +912,13 @@ struct Image {
   }
 };
 
+#ifdef WRITEPNG
+/// Image2PNG: Dumps an Image instance into a PNG file.
+void Image2PNG(Image img, std::string fn) {
+  write_image(fn, img.data, img.width, img.height);
+}
+#endif
+
 /// Image2PNM: Dumps an Image instance into a PNM file.
 void Image2PNM(Image img, std::string fn) {
   FILE *f = fopen(fn.c_str(), "wb");
@@ -1184,11 +1207,16 @@ void rasterize(Image * image, Model model) {
 
 HOST
 std::string gen_filename(int f) {
+  #ifdef WRITEPNG
+  #define EXTENSION "png"
+  #else
+  #define EXTENSION "pnm"
+  #endif
   char str[256];
   #ifdef VIDEO
-  sprintf(str, "frames/projG_frame%04d.pnm", f);
+  sprintf(str, "frames/projG_frame%04d.%s", f, EXTENSION);
   #else
-  sprintf(str, "projG_frame%04d.pnm", f);
+  sprintf(str, "projG_frame%04d.%s", f, EXTENSION);
   #endif
   return str;
 }
@@ -1246,9 +1274,17 @@ int main() {
     CHECK_LAST_CUDA_ERROR();
     #ifndef NOWRITE
     if (image.on_device) {
+      #ifndef WRITEPNG
       Image2PNM(image_to_cpu(image), gen_filename(f));
+      #else
+      Image2PNG(image_to_cpu(image), gen_filename(f));
+      #endif
     } else {
+      #ifndef WRITEPNG
       Image2PNM(image, gen_filename(f));
+      #else
+      Image2PNG(image, gen_filename(f));
+      #endif
     }
     CHECK_LAST_CUDA_ERROR();
     #else

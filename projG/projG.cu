@@ -28,7 +28,7 @@ Reach out to alih@uoregon.edu if you have any questions.
 #define WIDTH  1000
 
 #define FILL_NUM_THREADS       128
-#define SHADER_NUM_THREADS     256
+#define SHADING_NUM_THREADS    256
 #define MVP_NUM_THREADS        128
 #define RASTERIZER_NUM_THREADS 256
 
@@ -163,7 +163,7 @@ DATATYPE F441(DATATYPE f) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Model struct will hold vertices as a single matrix, transformed vertices as another, one for normals
-// one for colors, and one for shader values.
+// one for colors, and one for shading values.
 struct Model {
   int numTriangles;
   DATATYPE * vertices;
@@ -763,7 +763,7 @@ DATATYPE* GetTransforms(Camera camera, const DATATYPE height, const DATATYPE wid
 }
 
 KERNEL
-void phong_shader(
+void phong_shading_kernel(
     const DATATYPE * vertex_positions, 
     const DATATYPE * vertex_normals, 
     const DATATYPE * light_direction,
@@ -808,7 +808,7 @@ void phong_shader(
 }
 
 KERNEL
-void mvp_transform(
+void transformation_kernel(
     const DATATYPE * vertex_positions,
     const DATATYPE * mvp,
     DATATYPE * out_vertex_positions,
@@ -829,16 +829,16 @@ void mvp_transform(
 }
 
 HOST
-void shader_and_transform(Model *m, Camera c, LightingParameters lp, DATATYPE height, DATATYPE width) {
+void shading_and_transform(Model *m, Camera c, LightingParameters lp, DATATYPE height, DATATYPE width) {
   DATATYPE* mvp = GetTransforms(c, height, width);
   int num_vertices = m->numTriangles * 3;
   int problem_size = m->numTriangles * 9;
 
   cudaMalloc(&m->shading, sizeof(DATATYPE) * num_vertices);
 
-  int blocks = (problem_size + SHADER_NUM_THREADS - 1) / SHADER_NUM_THREADS;
-  int threads = SHADER_NUM_THREADS;
-  phong_shader<<<blocks, threads>>>(
+  int blocks = (problem_size + SHADING_NUM_THREADS - 1) / SHADING_NUM_THREADS;
+  int threads = SHADING_NUM_THREADS;
+  phong_shading_kernel<<<blocks, threads>>>(
       m->vertices, m->normals, 
       lp.lightDir, c.position, 
       m->shading,
@@ -852,7 +852,7 @@ void shader_and_transform(Model *m, Camera c, LightingParameters lp, DATATYPE he
 
   blocks = (problem_size + MVP_NUM_THREADS - 1) / MVP_NUM_THREADS;
   threads = MVP_NUM_THREADS;
-  mvp_transform<<<blocks, threads>>>(m->vertices, mvp, m->out_vertices, num_vertices);
+  transformation_kernel<<<blocks, threads>>>(m->vertices, mvp, m->out_vertices, num_vertices);
   //cudaDeviceSynchronize();
 }
 
@@ -1238,7 +1238,7 @@ int main() {
   #endif
     Camera camera = GetCamera(f, N_FRAMES);
     LightingParameters lp = GetLighting(camera);
-    shader_and_transform(&model, camera, lp, HEIGHT, WIDTH);
+    shading_and_transform(&model, camera, lp, HEIGHT, WIDTH);
     CHECK_LAST_CUDA_ERROR();
     image.clear();
     CHECK_LAST_CUDA_ERROR();

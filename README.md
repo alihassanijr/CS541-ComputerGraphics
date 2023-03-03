@@ -48,6 +48,20 @@ Start using OpenGL.
 
 <img src="assets/outputs/proj2B.png" width="300" />
 
+## Project G
+
+Project G is one where graduate students contribute a project to the class that the undergraduates can pick and complete for
+their final project. 
+Of course, I picked CUDA, always fun.
+
+[projG](projG/README.md) holds my contributed prompt, starter code I provided, and the solution (what I reduced to get the
+starter code.) Obviously I didn't write even a good naive rasterizer, but it was the best I could do in a reasonable amount of
+time, and what would also be easy enough for the students to get done within 8-10 hours.
+
+[projG-livecode](projG-livecode/README.md) is the live code I did in class when presenting.
+
+My presentation (80 minute lecture) is in [presentation/](presentation/README.md).
+
 ## Credits
 CS 441/541 (Winter 2023) was instructed by [Prof. Hank Childs](https://cdux.cs.uoregon.edu/childs.html).
 So far one of my favorite courses in grad school!

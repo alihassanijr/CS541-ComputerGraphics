@@ -2,7 +2,7 @@
 
 CS 441/541
 
-Project G - CUDA Rasterizer from scratch.
+Project 3F - CUDA Rasterizer from scratch.
 
 Reach out to alih@uoregon.edu if you have any questions.
 
@@ -29,7 +29,7 @@ Reach out to alih@uoregon.edu if you have any questions.
 
 #define FILL_NUM_THREADS       128
 #define SHADING_NUM_THREADS    256
-#define MVP_NUM_THREADS        128
+#define TRANSFORM_THREADS      128
 #define RASTERIZER_NUM_THREADS 256
 
 #ifdef FLOAT32
@@ -810,19 +810,19 @@ void phong_shading_kernel(
 KERNEL
 void transformation_kernel(
     const DATATYPE * vertex_positions,
-    const DATATYPE * mvp,
+    const DATATYPE * transforms,
     DATATYPE * out_vertex_positions,
     const int num_vertices) {
   const int linearIndex = blockIdx.x * blockDim.x + threadIdx.x;
   const int i = linearIndex / 3;
   const int j = linearIndex % 3;
   if (i < num_vertices) {
-    DATATYPE w = mvp[3 * 4 + 3]; // 4th dimension
-    DATATYPE accum = mvp[3 * 4 + j]; // 1.0 column
+    DATATYPE w = transforms[3 * 4 + 3]; // 4th dimension
+    DATATYPE accum = transforms[3 * 4 + j]; // 1.0 column
   #pragma unroll
     for (int k=0; k < 3; ++k) {
-      accum += vertex_positions[i * 3 + k] * mvp[k * 4 + j];
-      w += vertex_positions[i * 3 + k] * mvp[k * 4 + 3];
+      accum += vertex_positions[i * 3 + k] * transforms[k * 4 + j];
+      w += vertex_positions[i * 3 + k] * transforms[k * 4 + 3];
     }
     out_vertex_positions[i * 3 + j] = accum / w;
   }
@@ -830,7 +830,7 @@ void transformation_kernel(
 
 HOST
 void shading_and_transform(Model *m, Camera c, LightingParameters lp, DATATYPE height, DATATYPE width) {
-  DATATYPE* mvp = GetTransforms(c, height, width);
+  DATATYPE* transforms = GetTransforms(c, height, width);
   int num_vertices = m->numTriangles * 3;
   int problem_size = m->numTriangles * 9;
 
@@ -850,9 +850,9 @@ void shading_and_transform(Model *m, Camera c, LightingParameters lp, DATATYPE h
 
   cudaMalloc(&m->out_vertices, sizeof(DATATYPE) * problem_size);
 
-  blocks = (problem_size + MVP_NUM_THREADS - 1) / MVP_NUM_THREADS;
-  threads = MVP_NUM_THREADS;
-  transformation_kernel<<<blocks, threads>>>(m->vertices, mvp, m->out_vertices, num_vertices);
+  blocks = (problem_size + TRANSFORM_THREADS - 1) / TRANSFORM_THREADS;
+  threads = TRANSFORM_THREADS;
+  transformation_kernel<<<blocks, threads>>>(m->vertices, transforms, m->out_vertices, num_vertices);
   //cudaDeviceSynchronize();
 }
 

@@ -1,15 +1,14 @@
-# Project G - CUDA
+# Project 3F - CUDA
 
 You will redo your Project 1F in CUDA.
 
 
 ## Overview
 
-Project 1 was basically writing your own rasterizer in C++.
-We wrote a function saving RGB images to PNM files (which we later convert to PNGs), 
-then wrote a simplified scanline algorithm,
-added in color interpolation and the z-buffer algorithm.
-We then extended the rasterizer to factor in phong shading, and transformations (camera, view, device).
+Project 1 had you write your own rasterizer in C++.
+We started off writing a function saving RGB images to PNM files (which we later convert to PNGs), 
+then wrote a simplified scanline algorithm, added in color interpolation and the z-buffer algorithm.
+We then extended the rasterizer by adding Phong shading and transformations (camera, view, device).
 At that stage, we ended up moving the camera around to generate frames that built a whole video, which looked like this:
 
 <img src="../assets/outputs/proj1F.png" width="500" />
@@ -19,7 +18,7 @@ It was only in project 2 that we used OpenGL to basically redo all of that, but 
 All we did was either read triangles, or generate our own, which was relatively easy, because we could define shapes out of said
 triangles and move them around, apply transformations to them, ultimately generating our own custom-made dog.
 
-OpenGL made us learn a lot, but in this project, we're going to learn a different set of concepts that are (mostly) specific to
+In this project, we're going to learn a different set of concepts that are (mostly) specific to
 NVIDIA GPUs.
 
 NVIDIA introduced CUDA in 2005-2006, a new API and programming model that allowed programmers to take advantage of the GPUs'
@@ -29,7 +28,7 @@ it to multiply matrices?
 ## Description
 Your `main()` method will consist of the following:
 
-1. Read Triangles and allocate an Image,
+1. Read Triangles and allocate an image object on the GPU,
 2. For every frame:
     1. Set up camera,
     2. Get lighting parameters based on camera
@@ -79,7 +78,7 @@ __global__
 void transformation_kernel(
     // These are your kernel inputs.
     const double * vertex_positions, // Pointer to --all-- vertices.
-    const double * mvp,              // Pointer to the transformation matrix
+    const double * transformation,   // Pointer to the transformation matrix
                                      // (4x4 matrix; array of size 16)
     // This is what your kernel will compute, therefore not a const.
     double * out_vertex_positions,   // Pointer to --all-- transformed vertices.
@@ -118,14 +117,12 @@ Instructions should run the scanline algorithm on a single triangle.
 
 
 ## Rubric
-You will get full credit as long as your code is readable, 
-and your program runs faster than a CPU implementation.
+You will get full credit as long as your code is readable, and your program runs faster than a CPU implementation.
 
 Unfortunately, it's hard to measure that and set a target latency or frames per second, given that people are surely going to
 use different cards.
 
-As a starting point, aim for correctness (operations mentioned should run on the GPU),
-and you can always improve from there.
+As a starting point, aim for correctness (operations mentioned should run on the GPU), and you can always improve from there.
 
 ## Structure
 
@@ -242,9 +239,9 @@ We can avoid that by using the atomic minimum operation (there's also atomic max
 However, one issue is that the standard CUDA libraries do not implement atomic min and max for floats and doubles.
 So we'd have to implement our own either using the compare-and-swap operator (CAS), or rely on existing atomics and typecast.
 
-To make things easier, so that both you and I spend less time on such a minor issue, I copied an existing implementation that I
-knew I could rely on being up-to-date. 
-Therefore, you have:
+To make things easier, so that both you and I spend less time on such a minor issue, I copied an existing implementation 
+([ATen](https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/cuda/Atomic.cuh) that I knew I could rely on being 
+up-to-date. Therefore, you have:
 
 ```Cuda
 gpuAtomicMin(double * address, double value);
@@ -276,8 +273,9 @@ cudaDeviceSynchronize();
 CUDA does not throw errors normally. 
 You could launch a kernel and have it fail and you wouldn't notice it until you look at the output.
 The standard function to check for CUDA errors is `cudaGetLastError`, which returns an enum error type.
-To make things easier, we borrowed a function that gets the last error, and kills your program if there's a failure, and
-even points you at the line of code (where you called it):
+To make things easier, we borrowed a function ([source](https://leimao.github.io/blog/Proper-CUDA-Error-Checking/)) that 
+tries to find the last error, and kills your program if there was one, prints it out and even points at the line of code 
+(where you called it):
 
 ```Cuda
 CHECK_LAST_CUDA_ERROR();

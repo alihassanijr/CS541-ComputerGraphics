@@ -1,6 +1,15 @@
 # CS541 - Intro to Computer Graphics
+Took this class Winter 2023, and so far my favorite at UO.
 
 ## Overview
+The class started off with how rasterizers work, and building our own rasterizer.
+Project 1 was split into subprojects spread out over a few weeks, and in the end everyone wrote their own rasterizer in C++.
+Project 2 was mostly working with OpenGL.
+Final project was supposed to be either something proposed by the student, or doing 3 mini projects from a list of pre-defined
+projects.
+Grad students also had to contribute a mini project to the pre-defined project list, and do a 20 minute lecture on it.
+It was also possible to request contributing both a project and doing an 80 minute lecture, and have that count as the final
+project, which is what I did.
 
 ## Project 1
 

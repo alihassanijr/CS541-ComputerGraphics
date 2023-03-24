@@ -1,0 +1,78 @@
+
+<html>
+    <head>
+        <title>WebGL Live code</title>
+    </head>
+    <body>
+        <h1>WebGL Triangle</h1>
+        <canvas id="trig">
+        </canvas>
+        <script>
+            const canvas = document.getElementById("trig");
+            canvas.height = 500;
+            canvas.width  = 500;
+
+            const gl = canvas.getContext('webgl');
+
+            if (!gl) {
+                console.log('WebGL not initialized!');
+                throw new Error("WebGL is not available.");
+            }
+
+            const positions = [
+                 0,  1,  0,
+                -1, -1,  0,
+                 1, -1,  0
+            ];
+
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+            
+            const vertexShaderSource = " \
+            attribute vec3 position; \
+            varying vec3 frag_color; \
+            void main() { \
+                gl_Position = vec4(position, 1.0); \
+                frag_color = (position + 1.0) / 2.0; \
+            } \
+            ";
+
+            const fragmentShaderSource = " \
+            precision mediump float; \
+            varying vec3 frag_color; \
+            void main() { \
+                gl_FragColor = vec4(frag_color, 1.0); \
+            } \
+            ";
+
+            const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(vertexShader, vertexShaderSource);
+            gl.compileShader(vertexShader);
+
+            var message = gl.getShaderInfoLog(vertexShader);
+            console.log("vertex shader: ", message);
+
+            const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fragmentShader, fragmentShaderSource);
+            gl.compileShader(fragmentShader);
+
+            message = gl.getShaderInfoLog(fragmentShader);
+            console.log("fragment shader: ", message);
+
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+
+            const positionLocation = gl.getAttribLocation(program, 'position');
+            gl.enableVertexAttribArray(positionLocation);
+            gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+
+            gl.useProgram(program);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        </script>
+    </body>
+</html>
